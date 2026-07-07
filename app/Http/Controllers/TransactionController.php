@@ -89,7 +89,7 @@ class TransactionController extends Controller
         try {
             $validated = $request->validate([
                 // 'item_id' => 'required|exists:items,id',
-                'item_id' => 'required|exists:products,id',
+                'item_id' => 'required|exists:dms.products,id',
                 'qty' => 'required|integer|min:1',
                 'customer_id' => 'required|exists:clients,id',
                 'payment_method' => 'nullable|string|in:cash,gcash,credit,bank_transfer',
@@ -104,6 +104,9 @@ class TransactionController extends Controller
 
             $transaction = new TransactionDetail;
             $transaction->transaction_id = 'TRX-' . time() . '-' . rand(1000, 9999);
+            if (Schema::hasColumn('transaction_details', 'product_id')) {
+                $transaction->product_id = $item->id;
+            }
             $transaction->item = $item->product_name;
             $transaction->points_dealer = $item->dealer_points * $request->qty;
             $transaction->points_client = $item->customer_points * $request->qty;
@@ -169,9 +172,9 @@ class TransactionController extends Controller
         try {
             $validated = $request->validate([
                 // 'item_id' => 'required|exists:items,id',
-                'item_id' => 'required|exists:products,id',
+                'item_id' => 'required|exists:dms.products,id',
                 'qty' => 'required|integer|min:1',
-                'area_distributor_id' => 'required|exists:area_distributors,id',
+                'area_distributor_id' => 'required|exists:dms.area_distributors,id',
                 'payment_method' => 'nullable|string|in:cash,gcash,credit,bank_transfer',
                 'delivery_type' => 'nullable|string|in:pickup,delivery',
                 'delivery_fee' => 'nullable|numeric|min:0',
@@ -189,6 +192,9 @@ class TransactionController extends Controller
             $transactionCode = 'PRORD-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
 
             $transaction = new OrderDetail;
+            if (Schema::hasColumn('order_details', 'product_id')) {
+                $transaction->product_id = $item->id;
+            }
             $transaction->item = $item->product_name;
             $transaction->sku = $item->sku;
             $transaction->transaction_id = $transactionCode;
@@ -545,10 +551,15 @@ class TransactionController extends Controller
 
         $completedOrderQty = 0;
         if (Schema::hasTable('order_details')) {
-            $completedOrderQty = OrderDetail::where('dealer_id', $dealerId)
+            $completedOrderQty = OrderDetail::query()
+                ->where('dealer_id', $dealerId)
                 ->where('status', 'Completed')
-                ->where(function ($query) use ($productNames, $productSkus) {
+                ->where(function ($query) use ($product, $productNames, $productSkus) {
                     $query->whereIn('item', $productNames);
+
+                    if (Schema::hasColumn('order_details', 'product_id')) {
+                        $query->orWhere('product_id', $product->id);
+                    }
 
                     if (Schema::hasColumn('order_details', 'sku') && !empty($productSkus)) {
                         $query->orWhereIn('sku', $productSkus);
@@ -560,9 +571,13 @@ class TransactionController extends Controller
         $soldQty = 0;
         if (Schema::hasTable('transaction_details')) {
             $soldQty = TransactionDetail::where('dealer_id', $dealerId)
-                ->where(function ($query) use ($productNames, $productSkus) {
+                ->where(function ($query) use ($product, $productNames, $productSkus) {
                     $query->whereIn('item', $productNames)
                         ->orWhereIn('item_description', $productNames);
+
+                    if (Schema::hasColumn('transaction_details', 'product_id')) {
+                        $query->orWhere('product_id', $product->id);
+                    }
 
                     if (Schema::hasColumn('transaction_details', 'sku') && !empty($productSkus)) {
                         $query->orWhereIn('sku', $productSkus);

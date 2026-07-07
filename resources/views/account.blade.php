@@ -55,6 +55,16 @@
                     </div>
                     <i class="bi bi-chevron-right menu-arrow"></i>
                 </button>
+                <button type="button" class="menu-item menu-button" onclick="openBusinessModal()">
+                    <div class="menu-icon">
+                        <i class="bi bi-receipt"></i>
+                    </div>
+                    <div class="menu-content">
+                        <h4 class="menu-title">Business information</h4>
+                        <p class="menu-subtitle">View your registered account details</p>
+                    </div>
+                    <i class="bi bi-chevron-right menu-arrow"></i>
+                </button>
 
                 <a href="{{ url('points-history') }}" class="menu-item">
                     <div class="menu-icon">
@@ -77,17 +87,6 @@
                     </div>
                     <i class="bi bi-chevron-right menu-arrow"></i>
                 </a>
-
-                <button type="button" class="menu-item menu-button" onclick="openBusinessModal()">
-                    <div class="menu-icon">
-                        <i class="bi bi-receipt"></i>
-                    </div>
-                    <div class="menu-content">
-                        <h4 class="menu-title">Business information</h4>
-                        <p class="menu-subtitle">View your registered account details</p>
-                    </div>
-                    <i class="bi bi-chevron-right menu-arrow"></i>
-                </button>
                 
                 <a href="{{ route('dealer.stock.inventory') }}" class="menu-item">
                     <div class="menu-icon">
@@ -99,6 +98,16 @@
                     </div>
                     <i class="bi bi-chevron-right menu-arrow"></i>
                 </a>
+                {{-- <a href="{{ route('dealer.customers') }}" class="menu-item">
+                    <div class="menu-icon">
+                        <i class="bi bi-person-plus-fill"></i>
+                    </div>
+                    <div class="menu-content">
+                        <h4 class="menu-title">My Customers</h4>
+                        <p class="menu-subtitle">Manage your customer relationships</p>
+                    </div>
+                    <i class="bi bi-chevron-right menu-arrow"></i>
+                </a> --}}
 
                 <a href="mailto:support@pascalresources.com.ph" class="menu-item">
                     <div class="menu-icon">

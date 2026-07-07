@@ -7,6 +7,7 @@ use Illuminate\Foundation\Auth\AuthenticatesUsers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
+use App\AreaDistributor;
 
 class LoginController extends Controller
 {
@@ -19,57 +20,76 @@ class LoginController extends Controller
         $this->middleware('guest')->except('logout');
     }
 
+    // public function login(Request $request)
+    // {
+    //     $this->validateLogin($request);
+
+    //     if ($this->attemptLogin($request)) {
+    //         $user = Auth::user();
+
+    //         if (strtolower($user->role) !== 'admin') {
+    //             Auth::logout();
+
+    //             throw ValidationException::withMessages([
+    //                 $this->username() => ['The provided credentials are incorrect.'],
+    //             ]);
+    //         }
+
+    //         return $this->sendLoginResponse($request);
+    //     }
+
+    //     return $this->sendFailedLoginResponse($request);
+    // }
+
     public function login(Request $request)
     {
-        $this->validateLogin($request);
+        $request->validate([
+            'email' => 'required',
+            'password' => 'required',
+        ]);
 
-        if ($this->attemptLogin($request)) {
-            $user = Auth::user();
-
-            if (!$this->validateSelectedRole($request, $user) || $this->isUserInactive($user)) {
-                Auth::logout();
-                throw ValidationException::withMessages([
-                    $this->username() => ['The provided credentials are incorrect.'],
-                ]);
-            }
-
-            return $this->sendLoginResponse($request);
+        if (!Auth::attempt($request->only('email', 'password'))) {
+            return $this->errorResponse($request, 'Invalid credentials.');
         }
 
-        return $this->sendFailedLoginResponse($request);
+        $user = Auth::user();
+
+        // role check
+        if (!$this->validateSelectedRole($request, $user)) {
+            Auth::logout();
+            return $this->errorResponse($request, 'Invalid role selected.');
+        }
+
+        // inactive check
+        if ($this->isUserInactive($user)) {
+            Auth::logout();
+            return $this->errorResponse($request, 'Your account is inactive.');
+        }
+
+        return $this->successResponse($request, $user);
     }
 
     protected function validateSelectedRole($request, $user)
     {
-        $selectedRole = strtolower($request->input('selected_role'));
-        $userRole     = strtolower($user->role);
+        $selectedRole = strtolower(trim($request->selected_role));
+        $userRole = strtolower(trim($user->role));
 
         if (!$selectedRole) {
             return true;
         }
 
-        $validRoles = ['dealer', 'client'];
-        return in_array($userRole, $validRoles) && $userRole === $selectedRole;
+        return $selectedRole === $userRole;
     }
 
     protected function isUserInactive($user)
     {
-        if ($user->role === 'Dealer') {
-            $dealer = \App\Dealer::where('user_id', $user->id)->first();
-            return !$dealer || (isset($dealer->status) && strtolower($dealer->status) === 'inactive');
+        if (strtolower($user->role) === 'area distributor') {
+            $ad = AreaDistributor::where('user_id', $user->id)->first();
+
+            return !$ad || strtolower($ad->status ?? '') === 'inactive';
         }
 
-        if ($user->role === 'Client') {
-            $client = \App\Client::where('user_id', $user->id)->first();
-            if (!$client || (isset($client->status) && strtolower($client->status) === 'inactive')) {
-                return true;
-            }
-
-            $serial = $client->serial->serial_number ?? $client->serial_number ?? null;
-            return empty($serial);
-        }
-
-        return true;
+        return false;
     }
 
     protected function sendFailedLoginResponse(Request $request)
@@ -77,5 +97,43 @@ class LoginController extends Controller
         throw ValidationException::withMessages([
             $this->username() => ['The provided credentials are incorrect.'],
         ]);
+    }
+
+    protected function successResponse(Request $request, $user)
+    {
+        $redirect = $this->redirectByRole($user);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'redirect' => $redirect
+            ]);
+        }
+
+        return redirect($redirect);
+    }
+
+    protected function errorResponse(Request $request, $message)
+    {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => $message
+            ], 422);
+        }
+
+        return back()->withErrors(['email' => $message]);
+    }
+
+    protected function redirectByRole($user)
+    {
+        switch (strtolower($user->role)) {
+            case 'admin':
+                return '/';
+            case 'area distributor':
+                return '/ad-dashboard';
+            default:
+                return '/dashboard';
+        }
     }
 }

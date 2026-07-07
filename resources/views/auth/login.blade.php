@@ -109,7 +109,7 @@ $showRoleSelection = $isDirect && !$showLoginDirectly;
                 </div>
             </div>
 
-            <form id="loginForm" aria-label="{{ __('Login') }}">
+            <form id="loginForm" method="POST" action="{{ route('login') }}" aria-label="{{ __('Login') }}">
                 @csrf
                 
                 <input type="hidden" name="selected_role" id="selectedRoleInput" value="{{ old('selected_role') }}">
@@ -366,8 +366,13 @@ body {
 .selected-indicator {
     position: absolute;
     right: 15px;
-    font-size: 16px;
+    font-size: 0;
     font-weight: bold;
+}
+
+.selected-indicator::before {
+    content: "\2713";
+    font-size: 16px;
 }
 
 .role-icon {
@@ -653,7 +658,7 @@ body {
 </style>
 
 <script>
-let currentRole = '{{ old("selected_role") ?? "" }}';
+let currentRole = @json(old('selected_role', ''));
 
 document.addEventListener('DOMContentLoaded', function() {
     const selectedRoleInput = document.getElementById('selectedRoleInput');
@@ -668,7 +673,7 @@ document.addEventListener('DOMContentLoaded', function() {
         @if($errors->has('email') || $errors->has('password'))
             errorMessage = 'Invalid credentials. Please check your email/phone and password.';
         @else
-            errorMessage = '{{ $errors->first() }}';
+            errorMessage = @json($errors->first());
         @endif
         
         Swal.fire({
@@ -683,7 +688,7 @@ document.addEventListener('DOMContentLoaded', function() {
         Swal.fire({
             icon: 'error',
             title: 'Login Failed',
-            text: '{{ session('error') }}',
+            text: @json(session('error')),
             confirmButtonColor: '#5DADE2'
         });
     @endif
@@ -702,39 +707,20 @@ document.addEventListener('DOMContentLoaded', function() {
             const formData = new FormData(this);
             
             try {
-                const response = await fetch('{{ route("login") }}', {
+                const response = await fetch(loginForm.action, {
                     method: 'POST',
                     body: formData,
                     headers: {
                         'X-Requested-With': 'XMLHttpRequest',
                         'Accept': 'application/json'
                     },
-                    credentials: 'same-origin',
-                    redirect: 'manual'
+                    credentials: 'same-origin'
                 });
-                
-                if (response.type === 'opaqueredirect' || response.redirected) {
-                    window.location.href = response.url || '/dashboard';
-                    return;
-                }
-                
+
                 const contentType = response.headers.get('content-type');
-                
-                if (contentType && contentType.includes('text/html')) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Login Failed',
-                        text: 'Invalid credentials. Please check your email/phone and password.',
-                        confirmButtonColor: '#5DADE2'
-                    });
-                    
-                    submitButton.disabled = false;
-                    submitButton.innerHTML = originalText;
-                    return;
-                }
-                
-                const result = await response.json();
-                
+                const isJson = contentType && contentType.includes('application/json');
+                const result = isJson ? await response.json() : {};
+
                 if (response.ok && result.success) {
                     Swal.fire({
                         icon: 'success',
@@ -744,19 +730,33 @@ document.addEventListener('DOMContentLoaded', function() {
                         showConfirmButton: false,
                         confirmButtonColor: '#5DADE2'
                     }).then(() => {
-                        window.location.href = result.redirect || '/dashboard';
+                        window.location.href = result.redirect || '{{ route("home") }}';
                     });
-                } else {
+                    return;
+                }
+
+                if (response.status === 419) {
                     Swal.fire({
                         icon: 'error',
-                        title: 'Login Failed',
-                        text: result.message || 'Invalid credentials. Please check your email/phone and password.',
+                        title: 'Session Expired',
+                        text: 'Please refresh the page and try again.',
                         confirmButtonColor: '#5DADE2'
                     });
-                    
-                    submitButton.disabled = false;
-                    submitButton.innerHTML = originalText;
+                    return;
                 }
+
+                let errorMessage = result.message || 'Invalid credentials. Please check your email/phone and password.';
+                if (result.errors) {
+                    const firstError = Object.values(result.errors).flat()[0];
+                    errorMessage = firstError || errorMessage;
+                }
+
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Login Failed',
+                    text: errorMessage,
+                    confirmButtonColor: '#5DADE2'
+                });
             } catch (error) {
                 console.error('Login error:', error);
                 
@@ -766,7 +766,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     text: 'Unable to connect to the server. Please check your internet connection.',
                     confirmButtonColor: '#5DADE2'
                 });
-                
+            } finally {
                 submitButton.disabled = false;
                 submitButton.innerHTML = originalText;
             }

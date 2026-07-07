@@ -5,6 +5,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class Product extends Model
 {
+    protected $connection = 'dms';
+
     protected $table = 'products';
     
     protected $fillable = [

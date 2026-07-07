@@ -175,8 +175,13 @@ class ProductController extends Controller
             ->values()
             ->all();
         $productSkus = collect([$product->sku])->filter()->values()->all();
-        $orderDetailsHasSku = Schema::hasTable('order_details') && Schema::hasColumn('order_details', 'sku');
+        $orderDetailsHasSku = Schema::hasTable('order_details') &&
+            Schema::hasColumn('order_details', 'sku');
+        $orderDetailsHasProductId = Schema::hasTable('order_details') &&
+            Schema::hasColumn('order_details', 'product_id');
         $transactionDetailsHasSku = Schema::hasTable('transaction_details') && Schema::hasColumn('transaction_details', 'sku');
+        $transactionDetailsHasProductId = Schema::hasTable('transaction_details') &&
+            Schema::hasColumn('transaction_details', 'product_id');
 
         [$dealerStockByProduct] = $this->getProductStockMaps(collect([$product]));
 
@@ -189,11 +194,16 @@ class ProductController extends Controller
 
         $stockInRows = collect();
         if (Schema::hasTable('order_details')) {
-            $stockInRows = OrderDetail::with('ad')
+            $stockInRows = OrderDetail::query()
+                ->with('ad')
                 ->where('dealer_id', $user->id)
                 ->where('status', 'Completed')
-                ->where(function ($query) use ($productNames, $productSkus, $orderDetailsHasSku) {
+                ->where(function ($query) use ($product, $productNames, $productSkus, $orderDetailsHasSku, $orderDetailsHasProductId) {
                     $query->whereIn('item', $productNames);
+
+                    if ($orderDetailsHasProductId) {
+                        $query->orWhere('product_id', $product->id);
+                    }
 
                     if ($orderDetailsHasSku && !empty($productSkus)) {
                         $query->orWhereIn('sku', $productSkus);
@@ -223,9 +233,13 @@ class ProductController extends Controller
         if (Schema::hasTable('transaction_details')) {
             $stockOutRows = TransactionDetail::with('customer')
                 ->where('dealer_id', $user->id)
-                ->where(function ($query) use ($productNames, $productSkus, $transactionDetailsHasSku) {
+                ->where(function ($query) use ($product, $productNames, $productSkus, $transactionDetailsHasSku, $transactionDetailsHasProductId) {
                     $query->whereIn('item', $productNames)
                         ->orWhereIn('item_description', $productNames);
+
+                    if ($transactionDetailsHasProductId) {
+                        $query->orWhere('product_id', $product->id);
+                    }
 
                     if ($transactionDetailsHasSku && !empty($productSkus)) {
                         $query->orWhereIn('sku', $productSkus);
@@ -298,18 +312,40 @@ class ProductController extends Controller
         }
             
         if (Schema::hasTable('order_details')) {
-            $completedOrders = OrderDetail::where('status', 'Completed')
-                ->where(function ($query) use ($productNames, $productSkus) {
-                    $query->whereIn('item', $productNames)
-                        ->orWhereIn('sku', $productSkus);
+            $orderDetailsHasSku = Schema::hasColumn('order_details', 'sku');
+            $orderDetailsHasProductId = Schema::hasColumn('order_details', 'product_id');
+
+            $completedOrders = OrderDetail::query()
+                ->where('status', 'Completed')
+                ->where(function ($query) use ($productIds, $productNames, $productSkus, $orderDetailsHasSku, $orderDetailsHasProductId) {
+                    $query->whereIn('item', $productNames);
+
+                    if ($orderDetailsHasProductId && !empty($productIds)) {
+                        $query->orWhereIn('product_id', $productIds);
+                    }
+
+                    if ($orderDetailsHasSku && !empty($productSkus)) {
+                        $query->orWhereIn('sku', $productSkus);
+                    }
                 })
                 ->get();
         }
 
         if (Schema::hasTable('transaction_details')) {
-            $dealerTransactions = TransactionDetail::where(function ($query) use ($productNames, $productSkus) {
+            $transactionDetailsHasSku = Schema::hasColumn('transaction_details', 'sku');
+            $transactionDetailsHasProductId = Schema::hasColumn('transaction_details', 'product_id');
+
+            $dealerTransactions = TransactionDetail::where(function ($query) use ($productIds, $productNames, $productSkus, $transactionDetailsHasSku, $transactionDetailsHasProductId) {
                     $query->whereIn('item', $productNames)
                         ->orWhereIn('item_description', $productNames);
+
+                    if ($transactionDetailsHasProductId && !empty($productIds)) {
+                        $query->orWhereIn('product_id', $productIds);
+                    }
+
+                    if ($transactionDetailsHasSku && !empty($productSkus)) {
+                        $query->orWhereIn('sku', $productSkus);
+                    }
                 })
                 ->when(auth()->user()->role == "Dealer", function ($query) {
                     $query->where('dealer_id', auth()->id());
@@ -320,8 +356,9 @@ class ProductController extends Controller
                 ->get();
         }
 
-        if (Schema::hasTable('inventory_transfers')) {
-            $inventoryTransfers = DB::table('inventory_transfers')
+        if (Schema::connection('dms')->hasTable('inventory_transfers')) {
+            $inventoryTransfers = DB::connection('dms')
+                ->table('inventory_transfers')
                 // ->where('movement_type', '!=', 'transfer')
                 ->whereNull('deleted_at')
                 ->where(function ($query) use ($productIds, $productNames) {
@@ -349,7 +386,8 @@ class ProductController extends Controller
                 
                 $completedOrderQty = $completedOrders
                     ->filter(function ($order) use ($product, $adId, $dealerArea, $dealerUserIdsInArea) {
-                        $matchesProduct = $order->item === $product->product_name ||
+                        $matchesProduct = (int) ($order->product_id ?? 0) === (int) $product->id ||
+                            $order->item === $product->product_name ||
                             (!empty($product->sku) && $order->sku === $product->sku);
                         $matchesAd = $adId && (int) $order->ad_id === (int) $adId;
                         $matchesDealerArea = !$dealerArea || $dealerUserIdsInArea->contains((int) $order->dealer_id);
@@ -377,16 +415,19 @@ class ProductController extends Controller
             $dealerStockByProduct = $products->mapWithKeys(function ($product) use ($dealerCompletedOrders, $dealerTransactions) {
                 $completedOrderQty = $dealerCompletedOrders
                     ->filter(function ($order) use ($product) {
-                        return $order->item === $product->product_name ||
+                        return (int) ($order->product_id ?? 0) === (int) $product->id ||
+                            $order->item === $product->product_name ||
                             (!empty($product->sku) && $order->sku === $product->sku);
                     })
                     ->sum('qty');
 
                 $soldQty = $dealerTransactions
                     ->filter(function ($transaction) use ($product) {
-                        return $transaction->item === $product->product_name ||
+                        return (int) ($transaction->product_id ?? 0) === (int) $product->id ||
+                            $transaction->item === $product->product_name ||
                             $transaction->item_description === $product->product_name ||
-                            (!empty($product->description) && $transaction->item_description === $product->description);
+                            (!empty($product->description) && $transaction->item_description === $product->description) ||
+                            (!empty($product->sku) && $transaction->sku === $product->sku);
                     })
                     ->sum('qty');
 

@@ -56,6 +56,22 @@ return [
             'engine' => null,
         ],
 
+        'dms' => [
+            'driver' => env('DMS_DB_CONNECTION', 'mysql'),
+            'host' => env('DMS_DB_HOST', '127.0.0.1'),
+            'port' => env('DMS_DB_PORT', '3306'),
+            'database' => env('DMS_DB_DATABASE', 'dms_prei'),
+            'username' => env('DMS_DB_USERNAME', 'forge'),
+            'password' => env('DMS_DB_PASSWORD', ''),
+            'unix_socket' => env('DMS_DB_SOCKET', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+        ],
+
         'pgsql' => [
             'driver' => 'pgsql',
             'host' => env('DB_HOST', '127.0.0.1'),
