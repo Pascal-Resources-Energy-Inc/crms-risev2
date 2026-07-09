@@ -41,7 +41,7 @@
       <div class="section-content p-3">
         <div class="info-row d-flex justify-content-between align-items-center py-2 border-bottom">
           <span class="info-label">Payment Method:</span>
-          <span class="info-value fw-semibold" id="payment-method">Cash on hand</span>
+          <span class="info-value fw-semibold" id="payment-method">Cash on Delivery</span>
         </div>
         <div class="info-row d-flex justify-content-between align-items-center py-2 border-bottom">
           <span class="info-label">Total Items:</span>
@@ -71,7 +71,7 @@
               <i class="bi bi-cash-coin"></i>
             </div>
             <div class="payment-details flex-grow-1">
-              <div class="payment-name fw-semibold">Cash on hand</div>
+              <div class="payment-name fw-semibold">Cash on Delivery</div>
               <div class="payment-desc small text-muted">Customer pays upon delivery</div>
             </div>
           </div>
@@ -569,11 +569,11 @@
                     <i class="bi bi-cash-coin"></i>
                 </div>
                 <div class="payment-details flex-grow-1">
-                    <div class="payment-name fw-semibold">Cash on hand</div>
+                    <div class="payment-name fw-semibold">Cash on Delivery</div>
                     <div class="payment-desc small text-muted">Customer pays upon delivery</div>
                 </div>
             `;
-            paymentMethodText.textContent = 'Cash on hand';
+            paymentMethodText.textContent = 'Cash on Delivery';
         }
     }
 
