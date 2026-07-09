@@ -964,7 +964,7 @@
                         customer_name: order.customer?.name || 'Unknown Customer',
                         customer_serial: order.customer?.serial || '',
                         customer_number: order.customer?.number || '',
-                        payment_method: order.payment_method === 'gcash' ? 'GCash' : 'Cash on hand',
+                        payment_method: order.payment_method === 'gcash' ? 'GCash' : 'Cash on Delivery',
                         total_amount: totalAmount,
                         items: order.items || [],
                         status: order.status || 'Completed',

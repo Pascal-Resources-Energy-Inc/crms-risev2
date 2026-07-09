@@ -287,7 +287,7 @@
             <i class="bi bi-cash-coin"></i>
           </div>
           <div class="payment-details flex-grow-1">
-            <div class="payment-name">Cash on hand</div>
+            <div class="payment-name">Cash on Delivery</div>
             <div class="payment-desc">Pay when you receive your order</div>
           </div>
         </label>
