@@ -9,6 +9,7 @@ use App\Client;
 use App\Dealer;
 use App\OrderDetail;
 use App\TransactionDetail;
+use App\DealerStockRequest;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -162,6 +163,9 @@ class ProductController extends Controller
             'inStockCount' => $inventoryItems->where('dealer_stock', '>', 0)->count(),
             'lowStockCount' => $inventoryItems->where('status', 'low')->count(),
             'outStockCount' => $inventoryItems->where('status', 'out')->count(),
+            'stockRequests' => $user->role === 'Dealer'
+                ? DealerStockRequest::where('dealer_id', $user->id)->get()->keyBy('product_id')
+                : collect(),
         ]);
     }
 
