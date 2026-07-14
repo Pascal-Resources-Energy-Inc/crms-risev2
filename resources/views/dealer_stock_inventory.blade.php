@@ -16,6 +16,12 @@
     </div>
 
     <div class="inventory-shell">
+        @if(session('success'))
+            <div class="stock-feedback success"><i class="bi bi-check-circle-fill"></i>{{ session('success') }}</div>
+        @endif
+        @if($errors->any())
+            <div class="stock-feedback error"><i class="bi bi-exclamation-circle-fill"></i>{{ $errors->first() }}</div>
+        @endif
         <div class="summary-grid">
             <div class="summary-card units-card">
                 <div class="summary-icon units"><i class="bi bi-box-seam"></i></div>
@@ -55,6 +61,7 @@
 
         <div class="inventory-list" id="inventoryList">
             @forelse($inventoryItems as $item)
+                @php($stockRequest = $stockRequests->get($item['id']))
                 <article
                     class="inventory-card status-{{ $item['status'] }}"
                     data-status="{{ $item['status'] }}"
@@ -82,10 +89,7 @@
                         </div>
 
                         <div class="stock-meter {{ $item['status'] }}" aria-label="Dealer stock level">
-                            @php
-                                $meterWidth = min(100, max(0, $item['dealer_stock'] * 10));
-                            @endphp
-                            <div style="width: {{ $meterWidth }}%;"></div>
+                            <div style="width: {{ min(100, max(0, ((int) ($item['dealer_stock'] ?? 0)) * 10)) }}%;"></div>
                         </div>
                     </div>
 
@@ -111,6 +115,29 @@
                             <span>View Transactions</span>
                             <i class="bi bi-arrow-right-short"></i>
                         </a>
+                        @if(auth()->user()->role === 'Dealer')
+                            @if($stockRequest && $stockRequest->status === 'Rejected')
+                                <div class="rejection-remarks" role="status">
+                                    <div class="rejection-remarks-icon"><i class="bi bi-x-circle-fill"></i></div>
+                                    <div>
+                                        <span class="rejection-remarks-title">Stock request declined</span>
+                                        <p><strong>Admin remarks:</strong> {{ $stockRequest->remarks ?: 'No reason was provided.' }}</p>
+                                        @if($stockRequest->reviewed_at)
+                                            <small>Reviewed {{ $stockRequest->reviewed_at->format('M j, Y') }}</small>
+                                        @endif
+                                    </div>
+                                </div>
+                            @endif
+                            @if($item['dealer_stock'] > 0)
+                                <div class="stock-action locked"><i class="bi bi-lock-fill"></i><span>Stock already available</span></div>
+                            @elseif($stockRequest && $stockRequest->status === 'Pending')
+                                <div class="stock-action pending"><i class="bi bi-hourglass-split"></i><span>Request pending approval</span></div>
+                            @else
+                                <button type="button" class="stock-action request-stock" data-product-id="{{ $item['id'] }}" data-product-name="{{ e($item['name']) }}" data-product-sku="{{ e($item['sku'] ?: 'No SKU') }}">
+                                    <i class="bi bi-plus-circle-fill"></i><span>Request stock</span><i class="bi bi-arrow-right-short"></i>
+                                </button>
+                            @endif
+                        @endif
                     </div>
                 </article>
             @empty
@@ -129,6 +156,26 @@
         </div>
     </div>
 </div>
+
+@if(auth()->user()->role === 'Dealer')
+<div class="request-modal" id="stockRequestModal" aria-hidden="true">
+    <div class="request-modal-card" role="dialog" aria-modal="true" aria-labelledby="requestTitle">
+        <button type="button" class="modal-close" id="closeRequestModal" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+        <div class="modal-icon"><i class="bi bi-box-seam"></i></div>
+        <span class="modal-kicker">ADMIN APPROVAL REQUIRED</span>
+        <h2 id="requestTitle">Request item stock</h2>
+        <p id="requestProduct" class="request-product-name"></p>
+        <p class="modal-copy">Your request will be reviewed by an administrator. Stock is added only after approval.</p>
+        <form method="POST" action="{{ route('dealer.stock.requests.store') }}">
+            @csrf
+            <input type="hidden" name="product_id" id="requestProductId">
+            <label for="requestQuantity">Quantity to request</label>
+            <div class="quantity-input"><i class="bi bi-boxes"></i><input id="requestQuantity" name="quantity" type="number" min="1" max="100000" required placeholder="Enter quantity" inputmode="numeric"></div>
+            <button type="submit" class="submit-request"><i class="bi bi-send"></i> Submit request</button>
+        </form>
+    </div>
+</div>
+@endif
 @endsection
 
 @section('css')
@@ -555,6 +602,109 @@
         transform: translateY(-1px);
     }
 
+    .stock-action {
+        grid-column: 1 / -1;
+        min-height: 44px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 800;
+    }
+
+    .request-stock {
+        border: 1px solid #1688b3;
+        background: #e8f7fc;
+        color: #11769c;
+        cursor: pointer;
+        transition: transform 0.18s ease, background 0.18s ease;
+    }
+
+    .request-stock:hover { background: #d5f0fa; transform: translateY(-1px); }
+    .stock-action.locked { background: #f1f5f9; color: #64748b; }
+    .stock-action.pending { background: #fff7ed; color: #b45309; }
+
+    .rejection-remarks {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 10px;
+        padding: 11px;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        background: #fff7f7;
+        color: #991b1b;
+    }
+
+    .rejection-remarks-icon {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: #fee2e2;
+        color: #dc2626;
+        font-size: 17px;
+    }
+
+    .rejection-remarks-title {
+        display: block;
+        margin-top: 1px;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: .01em;
+    }
+
+    .rejection-remarks p {
+        margin: 3px 0 0;
+        color: #7f1d1d;
+        font-size: 12px;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+    }
+
+    .rejection-remarks p strong { font-weight: 800; }
+
+    .rejection-remarks small {
+        display: block;
+        margin-top: 5px;
+        color: #b45309;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .stock-feedback {
+        margin-bottom: 16px;
+        padding: 13px 15px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-size: 13px;
+        font-weight: 700;
+    }
+
+    .stock-feedback.success { background: #ecfdf3; color: #16834a; border: 1px solid #bbf7d0; }
+    .stock-feedback.error { background: #fef2f2; color: #b42318; border: 1px solid #fecaca; }
+
+    .request-modal { position: fixed; inset: 0; z-index: 2000; display: none; align-items: center; justify-content: center; padding: 20px; background: rgba(15, 23, 42, 0.58); backdrop-filter: blur(4px); }
+    .request-modal.show { display: flex; }
+    .request-modal-card { position: relative; width: min(430px, 100%); padding: 30px; border-radius: 16px; background: #fff; box-shadow: 0 24px 80px rgba(15, 23, 42, .28); }
+    .modal-close { position: absolute; top: 14px; right: 14px; width: 36px; height: 36px; border: 0; border-radius: 8px; color: #667085; background: #f1f5f9; cursor: pointer; }
+    .modal-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 12px; color: #1688b3; background: #e8f7fc; font-size: 22px; }
+    .modal-kicker { display: block; margin-top: 18px; color: #1688b3; font-size: 10px; font-weight: 800; letter-spacing: .9px; }
+    .request-modal h2 { margin: 6px 0 4px; color: #101828; font-size: 22px; font-weight: 800; }
+    .request-product-name { margin: 0; color: #344054; font-weight: 800; font-size: 14px; }
+    .modal-copy { margin: 11px 0 20px; color: #667085; font-size: 13px; line-height: 1.55; }
+    .request-modal label { display: block; margin-bottom: 7px; color: #344054; font-size: 13px; font-weight: 800; }
+    .quantity-input { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 13px; border: 1px solid #d9e4ef; border-radius: 8px; color: #1688b3; }
+    .quantity-input:focus-within { border-color: #1688b3; box-shadow: 0 0 0 3px rgba(22,136,179,.12); }
+    .quantity-input input { width: 100%; border: 0; outline: 0; color: #101828; font-size: 14px; }
+    .submit-request { width: 100%; height: 48px; margin-top: 16px; border: 0; border-radius: 8px; background: #1688b3; color: #fff; font-size: 14px; font-weight: 800; cursor: pointer; }
+    .submit-request:hover { background: #0f7298; }
+
     .inventory-empty {
         text-align: center;
         padding: 52px 20px;
@@ -701,6 +851,35 @@
 
     document.getElementById('refreshInventory')?.addEventListener('click', () => {
         window.location.reload();
+    });
+
+    const requestModal = document.getElementById('stockRequestModal');
+    const requestProductId = document.getElementById('requestProductId');
+    const requestProduct = document.getElementById('requestProduct');
+    const requestQuantity = document.getElementById('requestQuantity');
+
+    document.querySelectorAll('.request-stock').forEach((button) => {
+        button.addEventListener('click', () => {
+            requestProductId.value = button.dataset.productId;
+            requestProduct.textContent = `${button.dataset.productName} · ${button.dataset.productSku}`;
+            requestQuantity.value = '';
+            requestModal.classList.add('show');
+            requestModal.setAttribute('aria-hidden', 'false');
+            requestQuantity.focus();
+        });
+    });
+
+    function closeStockRequestModal() {
+        requestModal?.classList.remove('show');
+        requestModal?.setAttribute('aria-hidden', 'true');
+    }
+
+    document.getElementById('closeRequestModal')?.addEventListener('click', closeStockRequestModal);
+    requestModal?.addEventListener('click', (event) => {
+        if (event.target === requestModal) closeStockRequestModal();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeStockRequestModal();
     });
 </script>
 @endsection

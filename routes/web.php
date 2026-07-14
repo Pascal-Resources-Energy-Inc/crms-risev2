@@ -51,6 +51,10 @@ Route::get('/products', 'ProductController@index')->name('products.index');
 Route::get('/products/stocks', 'ProductController@stockSummary')->name('products.stocks');
 Route::get('/stock-inventory', 'ProductController@dealerStockInventory')->name('dealer.stock.inventory');
 Route::get('/stock-inventory/{product}/transactions', 'ProductController@dealerStockTransactions')->name('dealer.stock.transactions');
+Route::post('/stock-inventory/request', 'DealerStockRequestController@store')->name('dealer.stock.requests.store');
+// Route::get('/admin/stock-requests', 'DealerStockRequestController@adminIndex')->name('admin.stock.requests');
+// Route::post('/admin/stock-requests/{stockRequest}/approve', 'DealerStockRequestController@approve')->name('admin.stock.requests.approve');
+// Route::post('/admin/stock-requests/{stockRequest}/reject', 'DealerStockRequestController@reject')->name('admin.stock.requests.reject');
 
 Route::get('/about', 'HomeController@about')->name('about');
 

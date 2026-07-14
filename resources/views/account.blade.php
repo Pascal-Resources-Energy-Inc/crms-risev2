@@ -98,6 +98,13 @@
                     </div>
                     <i class="bi bi-chevron-right menu-arrow"></i>
                 </a>
+                @if(auth()->user()->role === 'Admin')
+                <a href="{{ route('admin.stock.requests') }}" class="menu-item">
+                    <div class="menu-icon"><i class="bi bi-clipboard2-check"></i></div>
+                    <div class="menu-content"><h4 class="menu-title">Stock Request Approvals</h4><p class="menu-subtitle">Review dealer item-stock requests</p></div>
+                    <i class="bi bi-chevron-right menu-arrow"></i>
+                </a>
+                @endif
                 {{-- <a href="{{ route('dealer.customers') }}" class="menu-item">
                     <div class="menu-icon">
                         <i class="bi bi-person-plus-fill"></i>
