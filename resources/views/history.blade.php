@@ -42,7 +42,7 @@
             <div class="transaction-card d-flex justify-content-between align-items-start">
               <div class="transaction-details flex-grow-1">
                 <div class="transaction-name">
-                  {{ strtoupper($transaction->customer->name ?? 'Unknown Customer') }}
+                  {{ $transaction->is_guest ? 'GUEST' : strtoupper($transaction->customer->name ?? 'Unknown Customer') }}
                 </div>
                 <div class="transaction-info">
                   {{ \Carbon\Carbon::parse($transaction->created_at)->format('g:i A') }} - 

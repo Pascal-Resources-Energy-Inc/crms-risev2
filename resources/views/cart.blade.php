@@ -141,6 +141,15 @@
                 <div id="customerDropdownContainer"></div>
                 <select id="customerSelector" class="customer-selector" style="display: none;">
                     <option value="">Select a customer</option>
+                    <option value="guest"
+                        data-name="Guest"
+                        data-full-name="Guest"
+                        data-serial=""
+                        data-number=""
+                        data-masked-serial=""
+                        data-masked-number="">
+                        Guest
+                    </option>
                     @if(isset($customers))
                         @foreach($customers as $customer)
                             @php
@@ -1229,6 +1238,10 @@
         
         if (customerId && customerName && customerNameElement) {
             customerNameElement.textContent = customerName;
+
+            if (customerId === 'guest' && customerDetailsElement) {
+                customerDetailsElement.textContent = 'Guest transaction - no points awarded';
+            }
             
             if (customerDetailsElement && customerSerial && customerNumber) {
                 customerDetailsElement.textContent = `Serial: ${customerSerial} • Number: ${customerNumber}`;
@@ -1314,7 +1327,7 @@
                     <div class="option-name">${option.name}</div>
                     <div class="option-details">
                         ${option.maskedSerial ? option.maskedSerial + ' • ' : ''}
-                        ${option.maskedNumber || ''}
+                        ${option.maskedNumber || (option.isGuest ? 'No points awarded' : '')}
                     </div>
                 </div>
             `).join('');
@@ -1420,7 +1433,9 @@
                 const detailsElement = document.getElementById(this.config.detailsElementId);
                 if (detailsElement) {
                     let details = '';
-                    if (this.config.detailsFormat) {
+                    if (option.isGuest) {
+                        details = 'Guest transaction - no points awarded';
+                    } else if (this.config.detailsFormat) {
                         // Replace placeholders with actual values
                         // details = this.config.detailsFormat
                         //     .replace('{serial}', option.serial || '')
@@ -1526,6 +1541,7 @@
                         // });
                         customers.push({
                             id: option.value,
+                            isGuest: option.value === 'guest',
 
                             // DISPLAY
                             name: option.getAttribute('data-name'),
@@ -1588,6 +1604,10 @@
             customerDetailsElement.textContent =`${selected.maskedSerial || ''} • ${selected.maskedNumber || ''}`;
         }
         
+        if (selected.isGuest && customerDetailsElement) {
+            customerDetailsElement.textContent = 'Guest transaction - no points awarded';
+        }
+
         closeClientModal();
         showSuccessMessage(`Customer "${selected.name}" selected`);
     }
@@ -2293,7 +2313,8 @@
                         id: customerId,
                         name: customerName,
                         serial: customerSerial,
-                        number: customerNumber
+                        number: customerNumber,
+                        is_guest: customerId === 'guest'
                     };
                 }
                 
