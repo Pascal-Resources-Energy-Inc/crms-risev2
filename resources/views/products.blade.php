@@ -103,7 +103,7 @@
     @forelse($products as $product)
       @php
         $dealerStock = (int) ($dealerStockByProduct[$product->id] ?? 0);
-        $productPrice = $product->price ?? 0;
+        $productPrice = $product->dealer_price ?? 0;
         $hasProductImage = !empty($product->product_image);
         $productImageUrl = $hasProductImage
             ? config('app.crms_admin_url') . '/public/uploads/products/' . $product->product_image
