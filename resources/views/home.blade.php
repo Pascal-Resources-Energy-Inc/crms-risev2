@@ -607,7 +607,7 @@
                                             style="width:50px;height:50px;object-fit:cover;">
                                         <div>
                                             <div class="fw-semibold client-transaction-name">
-                                                {{ strtoupper($transaction->customer->name ?? 'Unknown') }}
+                                                {{ strtoupper($transaction->customer->name ?? 'GUEST') }}
                                             </div>
 
                                             <small class="text-muted">
