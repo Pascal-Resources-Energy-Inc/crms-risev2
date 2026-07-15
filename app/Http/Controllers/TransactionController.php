@@ -91,14 +91,24 @@ class TransactionController extends Controller
                 // 'item_id' => 'required|exists:items,id',
                 'item_id' => 'required|exists:dms.products,id',
                 'qty' => 'required|integer|min:1',
-                'customer_id' => 'required|exists:clients,id',
+                'customer_id' => 'required',
                 'payment_method' => 'nullable|string|in:cash,gcash,credit,bank_transfer',
                 'delivery_type' => 'nullable|string|in:pickup,delivery',
             ]);
 
             // $item = Item::findOrFail($request->item_id);
             $item = Product::findOrFail($request->item_id);
-            $client = Client::with('user')->findOrFail($request->customer_id);
+            $isGuestTransaction = $request->customer_id === 'guest';
+
+            if (! $isGuestTransaction) {
+                $request->validate([
+                    'customer_id' => 'exists:clients,id',
+                ]);
+            }
+
+            $client = $isGuestTransaction
+                ? null
+                : Client::with('user')->findOrFail($request->customer_id);
             $dealerStock = $this->getDealerProductStock($item, auth()->id());
             $transactionStatus = $dealerStock >= (int) $request->qty ? 'Completed' : 'Pending';
 
@@ -108,13 +118,16 @@ class TransactionController extends Controller
                 $transaction->product_id = $item->id;
             }
             $transaction->item = $item->product_name;
-            $transaction->points_dealer = $item->dealer_points * $request->qty;
-            $transaction->points_client = $item->customer_points * $request->qty;
+            $transaction->points_dealer = $isGuestTransaction ? 0 : $item->dealer_points * $request->qty;
+            $transaction->points_client = $isGuestTransaction ? 0 : $item->customer_points * $request->qty;
             $transaction->item_description = $item->description;
             $transaction->qty = $request->qty;
             $transaction->price = $this->getProductPriceForUser($item);
-            $transaction->client_id = $request->customer_id;
-            $transaction->client_address = $client->address ?? '';
+            $transaction->client_id = $isGuestTransaction ? null : $request->customer_id;
+            $transaction->client_address = $isGuestTransaction ? '' : ($client->address ?? '');
+            if (Schema::hasColumn('transaction_details', 'is_guest')) {
+                $transaction->is_guest = $isGuestTransaction;
+            }
             $transaction->date = date('Y-m-d');
             $transaction->dealer_id = auth()->user()->id;
             $transaction->created_by = auth()->user()->id;

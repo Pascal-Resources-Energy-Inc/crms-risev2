@@ -702,6 +702,11 @@
 
         nameDisplay.textContent = customer.name || 'Selected Customer';
 
+        if (customer.id === 'guest' || customer.is_guest) {
+            detailsDisplay.textContent = 'Guest transaction - no points awarded';
+            return;
+        }
+
         let details = [];
         if (customer.serial) details.push(`Serial: ${customer.serial}`);
         if (customer.number) details.push(`Number: ${customer.number}`);
