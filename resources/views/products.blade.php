@@ -103,7 +103,8 @@
     @forelse($products as $product)
       @php
         $dealerStock = (int) ($dealerStockByProduct[$product->id] ?? 0);
-        $productPrice = $product->dealer_price ?? 0;
+        $dealerPrice = $product->dealer_price ?? 0;
+        $regularPrice = $product->price ?? 0;
         $hasProductImage = !empty($product->product_image);
         $productImageUrl = $hasProductImage
             ? config('app.crms_admin_url') . '/public/uploads/products/' . $product->product_image
@@ -154,9 +155,15 @@
 
                 <div class="price-add-container">
 
-                    <div class="price-block">
-                        <span class="price-label">Price</span>
-                        <div class="product-price">&#8369; {{ number_format($productPrice, 2) }}</div>
+                    <div class="price-details" aria-label="Product prices">
+                        <div class="price-block dealer-price-block">
+                            <span class="price-label"><i class="bi bi-tag-fill"></i> Dealer Price</span>
+                            <div class="product-price">&#8369; {{ number_format($dealerPrice, 2) }}</div>
+                        </div>
+                        <div class="price-block regular-price-block">
+                            <span class="price-label">Price</span>
+                            <div class="regular-price">&#8369; {{ number_format($regularPrice, 2) }}</div>
+                        </div>
                     </div>
 
                     <div class="add-to-cart">
@@ -165,9 +172,11 @@
                             class="add-btn btn btn-primary rounded-circle p-0 d-flex justify-content-center align-items-center"
                             data-id="{{ $product->id }}"
                             data-container="container-{{ $product->id }}"
-                            data-price="{{ $productPrice }}"
+                            data-price="{{ $dealerPrice }}"
+                            data-dealer-price="{{ $dealerPrice }}"
+                            data-regular-price="{{ $regularPrice }}"
                             data-name="{{ $product->product_name }}"
-                            data-image="{{ $productImageUrl ?? asset('images/no-image.png') }}"
+                            data-image="{{ $productImageUrl ?? asset('images/product-placeholder.svg') }}"
                             data-dealer-stock="{{ $dealerStock }}"
                             aria-label="Add {{ $product->product_name }} to cart"
                         >
@@ -732,11 +741,52 @@
   text-transform: uppercase;
 }
 
+.price-details {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.price-block {
+  min-width: 108px;
+  padding: 8px 10px;
+  border: 1px solid #e3eaf2;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.dealer-price-block {
+  border-color: #b9d8f2;
+  background: linear-gradient(135deg, #eef8ff, #f8fcff);
+}
+
+.dealer-price-block .price-label {
+  color: #256fb4;
+}
+
+.price-label i {
+  margin-right: 2px;
+}
+
 .product-price {
   color: #256fb4;
   font-size: 18px;
   font-weight: 800;
   line-height: 1.2;
+}
+
+.regular-price {
+  color: #4b5563;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+@media (max-width: 420px) {
+  .price-block {
+    min-width: 96px;
+    padding: 7px 8px;
+  }
 }
 
 .add-btn {
@@ -1918,6 +1968,8 @@
       id: productId,
       name: productName,
       price: parseFloat(button.getAttribute('data-price')),
+      dealerPrice: parseFloat(button.getAttribute('data-dealer-price')),
+      regularPrice: parseFloat(button.getAttribute('data-regular-price')),
       image: button.getAttribute('data-image'),
       containerId: button.getAttribute('data-container') || button.closest('[id^="container-"]')?.id,
       dealerStock: dealerStock
@@ -2007,12 +2059,16 @@
       }
     } else if (existingProductIndex !== -1) {
       cart.products[existingProductIndex].quantity = newQuantity;
+      cart.products[existingProductIndex].dealerPrice = productData.dealerPrice;
+      cart.products[existingProductIndex].regularPrice = productData.regularPrice;
     } else {
       cart.products.push({
         id: productData.id,
         name: productData.name,
         originalName: productData.name,
         price: productData.price,
+        dealerPrice: productData.dealerPrice,
+        regularPrice: productData.regularPrice,
         quantity: newQuantity,
         image: productData.image,
         dealerStock: productData.dealerStock,

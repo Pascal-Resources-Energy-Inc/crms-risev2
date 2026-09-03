@@ -122,7 +122,8 @@ class TransactionController extends Controller
             $transaction->points_client = $isGuestTransaction ? 0 : $item->customer_points * $request->qty;
             $transaction->item_description = $item->description;
             $transaction->qty = $request->qty;
-            $transaction->price = $this->getProductPriceForUser($item);
+            // Client transactions always use the product's regular price.
+            $transaction->price = $item->price ?? 0;
             $transaction->client_id = $isGuestTransaction ? null : $request->customer_id;
             $transaction->client_address = $isGuestTransaction ? '' : ($client->address ?? '');
             if (Schema::hasColumn('transaction_details', 'is_guest')) {
@@ -215,7 +216,8 @@ class TransactionController extends Controller
             // $transaction->points_client = $item->customer_points * $request->qty;
             $transaction->item_description = $item->description;
             $transaction->qty = $request->qty;
-            $transaction->price = $this->getProductPriceForUser($item);
+            // Orders to an Area Distributor always use dealer pricing.
+            $transaction->price = $item->dealer_price ?? $item->price ?? 0;
 
             $transaction->ad_id = $request->area_distributor_id;
             // $transaction->ad_id = $ad->user_id; // ✅ SAVE USER ID (NOT AD ID)
