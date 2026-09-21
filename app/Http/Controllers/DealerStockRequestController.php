@@ -8,6 +8,7 @@ use App\Product;
 use App\TransactionDetail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Schema;
 
 class DealerStockRequestController extends Controller
@@ -17,18 +18,29 @@ class DealerStockRequestController extends Controller
     public function store(Request $request)
     {
         abort_unless(auth()->user()->role === 'Dealer', 403);
-        $request->validate(['product_id' => 'required|integer|exists:dms.products,id', 'quantity' => 'required|integer|min:1|max:100000']);
+        $request->validate([
+            'product_id' => 'required|integer|exists:dms.products,id',
+            'quantity' => 'required|integer|min:1|max:100000',
+            'attachments' => 'nullable|array|max:10',
+            'attachments.*' => 'file|mimes:jpg,jpeg,png,pdf,doc,docx,xls,xlsx|max:10240',
+        ]);
         $product = Product::findOrFail($request->product_id);
+        $attachments = $this->storeAttachments($request);
 
-        DB::transaction(function () use ($request, $product) {
+        try {
+        DB::transaction(function () use ($request, $product, $attachments) {
             $existing = DealerStockRequest::where('dealer_id', auth()->id())->where('product_id', $product->id)->lockForUpdate()->first();
             abort_if($this->stockForDealer($product, auth()->id()) > 0, 422, 'You already have stock for this item. You cannot request more until all current stock is used.');
             abort_if($existing && $existing->status === 'Pending', 422, 'This item already has a pending stock request.');
             DealerStockRequest::updateOrCreate(
                 ['dealer_id' => auth()->id(), 'product_id' => $product->id],
-                ['quantity' => $request->quantity, 'status' => 'Pending', 'remarks' => null, 'reviewed_by' => null, 'reviewed_at' => null, 'approved_order_id' => null]
+                ['quantity' => $request->quantity, 'attachments' => $attachments, 'status' => 'Pending', 'remarks' => null, 'reviewed_by' => null, 'reviewed_at' => null, 'approved_order_id' => null]
             );
         });
+        } catch (\Throwable $exception) {
+            $this->deleteAttachments($attachments);
+            throw $exception;
+        }
         return redirect()->route('dealer.stock.inventory')->with('success', 'Stock request submitted for admin approval.');
     }
 
@@ -86,5 +98,34 @@ class DealerStockRequestController extends Controller
             Schema::hasColumn('transaction_details', 'product_id') ? $q->where('product_id', $product->id)->orWhere('item', $product->product_name)->orWhere('item_description', $product->product_name) : $q->where('item', $product->product_name)->orWhere('item_description', $product->product_name);
         })->sum('qty');
         return max(0, (int) $orders - (int) $sales);
+    }
+
+    private function storeAttachments(Request $request)
+    {
+        if (!$request->hasFile('attachments')) return [];
+
+        $directory = public_path('uploads/stock-request-attachments/' . auth()->id());
+        if (!File::isDirectory($directory)) {
+            File::makeDirectory($directory, 0755, true);
+        }
+        $attachments = [];
+
+        foreach ($request->file('attachments') as $file) {
+            if (!$file->isValid()) continue;
+
+            $filename = now()->format('YmdHis') . '-' . bin2hex(random_bytes(8)) . '.' . $file->getClientOriginalExtension();
+            $file->move($directory, $filename);
+            $attachments[] = 'uploads/stock-request-attachments/' . auth()->id() . '/' . $filename;
+        }
+
+        return $attachments;
+    }
+
+    private function deleteAttachments(array $attachments)
+    {
+        foreach ($attachments as $attachment) {
+            $path = public_path($attachment);
+            if (File::exists($path)) File::delete($path);
+        }
     }
 }
