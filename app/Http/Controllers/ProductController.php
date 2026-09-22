@@ -39,7 +39,21 @@ class ProductController extends Controller
         
         // $products = Product::with('adProduct.areas')->where('status', 'Activate')->orderBy('created_at', 'desc')->get();
         
-        $customers = Client::whereHas('serial')->get();
+        $customersQuery = Client::whereHas('serial');
+
+        if (auth()->user()->role === 'Dealer') {
+            $dealerMfi = trim((string) $userDealer->mfi);
+
+            // A dealer must only select customers assigned to the same MFI.
+            // Do not fall back to all customers when the dealer has no MFI.
+            if ($dealerMfi === '') {
+                $customersQuery->whereRaw('1 = 0');
+            } else {
+                $customersQuery->whereRaw('LOWER(TRIM(mfi)) = ?', [strtolower($dealerMfi)]);
+            }
+        }
+
+        $customers = $customersQuery->get();
         $items = Item::get();
         $dealers = Dealer::get();
         
@@ -164,7 +178,7 @@ class ProductController extends Controller
             'lowStockCount' => $inventoryItems->where('status', 'low')->count(),
             'outStockCount' => $inventoryItems->where('status', 'out')->count(),
             'stockRequests' => $user->role === 'Dealer'
-                ? DealerStockRequest::where('dealer_id', $user->id)->get()->keyBy('product_id')
+                ? DealerStockRequest::where('dealer_id', $user->id)->latest()->get()->unique('product_id')->keyBy('product_id')
                 : collect(),
         ]);
     }

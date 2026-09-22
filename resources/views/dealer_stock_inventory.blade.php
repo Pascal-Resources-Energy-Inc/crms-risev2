@@ -70,7 +70,7 @@
                     <div class="product-media">
                         <img
                             src="{{ $item['image'] }}"
-                            onerror="this.src='{{ asset('images/no-image.png') }}'"
+                            onerror="this.src='{{ asset('images/no-image.jpg') }}'"
                             alt="{{ $item['name'] }}"
                         >
                     </div>
@@ -166,11 +166,15 @@
         <h2 id="requestTitle">Request item stock</h2>
         <p id="requestProduct" class="request-product-name"></p>
         <p class="modal-copy">Your request will be reviewed by an administrator. Stock is added only after approval.</p>
-        <form method="POST" action="{{ route('dealer.stock.requests.store') }}">
+        <form method="POST" action="{{ route('dealer.stock.requests.store') }}" enctype="multipart/form-data">
             @csrf
             <input type="hidden" name="product_id" id="requestProductId">
             <label for="requestQuantity">Quantity to request</label>
-            <div class="quantity-input"><i class="bi bi-boxes"></i><input id="requestQuantity" name="quantity" type="number" min="1" max="100000" required placeholder="Enter quantity" inputmode="numeric"></div>
+            <div class="quantity-input mb-2"><i class="bi bi-boxes"></i><input id="requestQuantity" name="quantity" type="number" min="1" max="100000" required placeholder="Enter quantity" inputmode="numeric"></div>
+            <label for="requestAttachments">Attachments <span class="optional-label">Optional</span></label>
+            <input id="requestAttachments" name="attachments[]" type="file" multiple accept="image/jpeg,image/png,application/pdf,.doc,.docx,.xls,.xlsx" class="request-attachments">
+            <small class="attachment-help">Upload up to 10 files (JPG, PNG, PDF, Word, or Excel), 10 MB each.</small>
+            <div id="attachmentNames" class="attachment-names" aria-live="polite"></div>
             <button type="submit" class="submit-request"><i class="bi bi-send"></i> Submit request</button>
         </form>
     </div>
@@ -702,6 +706,10 @@
     .quantity-input { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 13px; border: 1px solid #d9e4ef; border-radius: 8px; color: #1688b3; }
     .quantity-input:focus-within { border-color: #1688b3; box-shadow: 0 0 0 3px rgba(22,136,179,.12); }
     .quantity-input input { width: 100%; border: 0; outline: 0; color: #101828; font-size: 14px; }
+    .optional-label { font-size: 11px; font-weight: 600; color: #667085; }
+    .request-attachments { display: block; width: 100%; margin-top: 6px; padding: 10px; border: 1px dashed #b8cad8; border-radius: 8px; background: #f8fbfd; font-size: 12px; color: #344054; }
+    .attachment-help { display: block; margin-top: 6px; color: #667085; font-size: 11px; line-height: 1.4; }
+    .attachment-names { margin-top: 7px; color: #1688b3; font-size: 12px; line-height: 1.5; }
     .submit-request { width: 100%; height: 48px; margin-top: 16px; border: 0; border-radius: 8px; background: #1688b3; color: #fff; font-size: 14px; font-weight: 800; cursor: pointer; }
     .submit-request:hover { background: #0f7298; }
 
@@ -857,16 +865,27 @@
     const requestProductId = document.getElementById('requestProductId');
     const requestProduct = document.getElementById('requestProduct');
     const requestQuantity = document.getElementById('requestQuantity');
+    const requestAttachments = document.getElementById('requestAttachments');
+    const attachmentNames = document.getElementById('attachmentNames');
 
     document.querySelectorAll('.request-stock').forEach((button) => {
         button.addEventListener('click', () => {
             requestProductId.value = button.dataset.productId;
             requestProduct.textContent = `${button.dataset.productName} · ${button.dataset.productSku}`;
             requestQuantity.value = '';
+            requestAttachments.value = '';
+            attachmentNames.textContent = '';
             requestModal.classList.add('show');
             requestModal.setAttribute('aria-hidden', 'false');
             requestQuantity.focus();
         });
+    });
+
+    requestAttachments?.addEventListener('change', () => {
+        const files = Array.from(requestAttachments.files || []);
+        attachmentNames.textContent = files.length
+            ? `${files.length} file${files.length === 1 ? '' : 's'} selected: ${files.map(file => file.name).join(', ')}`
+            : '';
     });
 
     function closeStockRequestModal() {

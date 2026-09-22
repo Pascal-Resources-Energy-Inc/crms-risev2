@@ -38,6 +38,10 @@
             </div>
             </label>
         </div>
+        <div class="transaction-price-note" id="transaction-price-note" role="status">
+            <i class="bi bi-person-check-fill"></i>
+            <div><strong>Client pricing</strong><span>Regular product price is applied.</span></div>
+        </div>
     </div>
     <div id="client-transaction-section" class="client-section">
         <div class="client-content">
@@ -930,7 +934,24 @@
         font-size: 16px;
         font-weight: 700;
         color: #4A90E2;
-        margin-bottom: 8px;
+        margin-bottom: 3px;
+    }
+
+    .item-price-type {
+        display: inline-block;
+        margin-bottom: 7px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: #eef8ff;
+        color: #287bb4;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: .02em;
+    }
+
+    .item-price-type.is-dealer {
+        background: #f2ebff;
+        color: #6f42c1;
     }
 
     .item-quantity {
@@ -1184,7 +1205,44 @@
     .cart-badge-new.animate {
         transform: scale(1.2);
     }
-    </style>
+
+    .transaction-price-note {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 10px;
+        padding: 10px 12px;
+        border: 1px solid #b8dff7;
+        border-radius: 10px;
+        background: #eef8ff;
+        color: #17699e;
+    }
+
+    .transaction-price-note.is-order {
+        border-color: #d7c3f4;
+        background: #f7f2ff;
+        color: #6641a4;
+    }
+
+    .transaction-price-note > i {
+        font-size: 18px;
+    }
+
+    .transaction-price-note strong,
+    .transaction-price-note span {
+        display: block;
+    }
+
+    .transaction-price-note strong {
+        font-size: 12px;
+    }
+
+    .transaction-price-note span {
+        margin-top: 1px;
+        font-size: 11px;
+        opacity: .85;
+    }
+</style>
 @endsection
 
 @section('javascript')
@@ -2023,12 +2081,17 @@
                         <div class="swipe-item" data-id="${item.id}">
                             <div class="cart-item">
                                 <div class="item-image">
-                                    <img src="${item.image}" alt="${item.originalName || item.name}">
+                                    <img src="${item.image || '{{ asset('images/product-placeholder.svg') }}'}"
+                                        alt="${item.originalName || item.name}"
+                                        onerror="this.onerror=null;this.src='{{ asset('images/product-placeholder.svg') }}';">
                                 </div>
                                 <div class="item-details">
                                     <div class="item-name">${item.originalName || item.name}</div>
                                     ${colorIndicatorHTML}
                                     <div class="item-price">₱ ${item.price.toFixed(2)}</div>
+                                    <span class="item-price-type ${item.priceType === 'dealer' ? 'is-dealer' : ''}">
+                                        ${item.priceType === 'dealer' ? 'Dealer price' : 'Regular price'}
+                                    </span>
                                     <div class="item-quantity">
                                         <button class="quantity-btn minus-btn" data-id="${item.id}">−</button>
                                         <input type="number" 
@@ -2230,6 +2293,40 @@
             if (totalFinalElement) totalFinalElement.textContent = `₱ ${total.toFixed(2)}`;
             if (finalTotalElement) finalTotalElement.textContent = `₱ ${total.toFixed(2)}`;
         }
+
+        function updateTransactionPriceNotice(transactionType) {
+            const note = document.getElementById('transaction-price-note');
+            if (!note) return;
+
+            const isOrder = transactionType === 'ad_order';
+            note.classList.toggle('is-order', isOrder);
+            note.innerHTML = isOrder
+                ? '<i class="bi bi-building-fill"></i><div><strong>Order pricing</strong><span>Dealer product price is applied.</span></div>'
+                : '<i class="bi bi-person-check-fill"></i><div><strong>Client pricing</strong><span>Regular product price is applied.</span></div>';
+        }
+
+        window.updateTransactionPricing = function(transactionType) {
+            const isOrder = transactionType === 'ad_order';
+
+            dealerCartData = dealerCartData.map(item => {
+                const dealerPrice = Number(item.dealerPrice ?? item.price ?? 0);
+                const regularPrice = Number(item.regularPrice ?? item.price ?? 0);
+
+                return {
+                    ...item,
+                    dealerPrice,
+                    regularPrice,
+                    price: isOrder ? dealerPrice : regularPrice,
+                    priceType: isOrder ? 'dealer' : 'regular'
+                };
+            });
+
+            localStorage.setItem('dealerCartData', JSON.stringify(dealerCartData));
+            updateCartStats();
+            renderCartItems();
+            updateOrderSummary();
+            updateTransactionPriceNotice(transactionType);
+        };
 
         function showStockAlert(message) {
             if (typeof Swal !== 'undefined') {
@@ -2447,6 +2544,7 @@
 
         renderCartItems();
         updateOrderSummary();
+        window.updateTransactionPricing('client_transaction');
     });
 </script>
 
@@ -2484,6 +2582,10 @@
             ad.style.display = 'block';
 
             detectAD();
+        }
+
+        if (typeof window.updateTransactionPricing === 'function') {
+            window.updateTransactionPricing(selected);
         }
     }
 
@@ -2575,12 +2677,13 @@
             return details.length ? details.join(' • ') : 'No details available';
         };
 
-        // ✅ MANUAL SELECTION
-        // if (window.selectedAD) {
-        //     adName.textContent = window.selectedAD.name;
-        //     adDetails.textContent = buildDetails(window.selectedAD);
-        //     return;
-        // }
+        // Keep an AD selected manually by the dealer instead of replacing it
+        // with the nearest auto-assigned AD.
+        if (window.selectedAD) {
+            adName.textContent = window.selectedAD.name;
+            renderADDetails(window.selectedAD);
+            return;
+        }
 
         if (window.matchedADs.length > 0) {
             const nearest = window.matchedADs[0];
@@ -2589,17 +2692,6 @@
 
             adName.textContent = nearest.name;
             renderADDetails(nearest);
-            return;
-        }
-
-        // ✅ AUTO SELECT NEAREST
-        if (window.matchedADs.length > 0) {
-            const nearest = window.matchedADs[0]; // must already be sorted
-
-            window.selectedAD = nearest;
-
-            adName.textContent = nearest.name;
-            adDetails.textContent = buildDetails(nearest);
             return;
         }
 

@@ -24,7 +24,7 @@
             <div class="product-photo">
                 <img
                     src="{{ $productImage }}"
-                    onerror="this.src='{{ asset('images/no-image.png') }}'"
+                    onerror="this.src='{{ asset('images/no-image.jpg') }}'"
                     alt="{{ $product->product_name }}"
                 >
             </div>

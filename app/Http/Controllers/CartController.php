@@ -110,7 +110,21 @@ class CartController extends Controller
         $dealerLat = $dealer->latitude;
         $dealerLng = $dealer->longitude;
 
-        $customers = Client::whereHas('serial')->get();
+        $customersQuery = Client::whereHas('serial');
+
+        if ($user->role === 'Dealer') {
+            $dealerMfi = trim((string) optional($dealer)->mfi);
+
+            // Never expose customers outside the authenticated dealer's MFI.
+            // A dealer without an assigned MFI gets an empty customer list.
+            if ($dealerMfi === '') {
+                $customersQuery->whereRaw('1 = 0');
+            } else {
+                $customersQuery->whereRaw('LOWER(TRIM(mfi)) = ?', [strtolower($dealerMfi)]);
+            }
+        }
+
+        $customers = $customersQuery->get();
         $items = Item::get();
         $dealers = Dealer::get();
         $transactions = [];
@@ -149,21 +163,20 @@ class CartController extends Controller
             return $ad;
         });
 
-        // ✅ STEP 2: filter by center if exists
-        if ($center) {
-            $adsWithDistance = $adsWithDistance->filter(function ($ad) use ($center) {
+        // Keep every AD assigned to the dealer's area. Coordinates are optional;
+        // when present, they only determine the display order.
+        $matchedADs = $center
+            ? $adsWithDistance->filter(function ($ad) use ($center) {
                 return $ad->areas->contains('area_name', $center);
-            })->values();
-        }
+            })->values()
+            : collect();
 
-        // ✅ STEP 3: sort by nearest distance
-        $matchedADs = $adsWithDistance
-            ->filter(fn ($ad) => $ad->distance !== null)
-            ->sortBy('distance')
+        $matchedADs = $matchedADs
+            ->sortBy(fn ($ad) => $ad->distance === null ? PHP_FLOAT_MAX : $ad->distance)
             ->values();
-        
-        // fallback if no distance available
-        $availableADs = $matchedADs->count()
+
+        // If no AD is assigned to the dealer's area, let the dealer choose from all ADs.
+        $availableADs = $matchedADs->isNotEmpty()
             ? $matchedADs
             : $areaDistributor;
 

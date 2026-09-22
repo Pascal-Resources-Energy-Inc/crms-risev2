@@ -12,12 +12,16 @@ class Product extends Model
     protected $fillable = [
         'product_name',
         'price',
+        'dealer_price',
+        'srp_price',
         'deposit',
         'product_image'
     ];
 
     protected $casts = [
         'price' => 'decimal:2',
+        'dealer_price' => 'decimal:2',
+        'srp_price' => 'decimal:2',
         'deposit' => 'decimal:2',
     ];
 
