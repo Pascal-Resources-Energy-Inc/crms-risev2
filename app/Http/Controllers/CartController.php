@@ -110,7 +110,21 @@ class CartController extends Controller
         $dealerLat = $dealer->latitude;
         $dealerLng = $dealer->longitude;
 
-        $customers = Client::whereHas('serial')->get();
+        $customersQuery = Client::whereHas('serial');
+
+        if ($user->role === 'Dealer') {
+            $dealerMfi = trim((string) optional($dealer)->mfi);
+
+            // Never expose customers outside the authenticated dealer's MFI.
+            // A dealer without an assigned MFI gets an empty customer list.
+            if ($dealerMfi === '') {
+                $customersQuery->whereRaw('1 = 0');
+            } else {
+                $customersQuery->whereRaw('LOWER(TRIM(mfi)) = ?', [strtolower($dealerMfi)]);
+            }
+        }
+
+        $customers = $customersQuery->get();
         $items = Item::get();
         $dealers = Dealer::get();
         $transactions = [];

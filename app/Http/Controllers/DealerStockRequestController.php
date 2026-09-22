@@ -29,13 +29,25 @@ class DealerStockRequestController extends Controller
 
         try {
         DB::transaction(function () use ($request, $product, $attachments) {
-            $existing = DealerStockRequest::where('dealer_id', auth()->id())->where('product_id', $product->id)->lockForUpdate()->first();
+            $existingPendingRequest = DealerStockRequest::where('dealer_id', auth()->id())
+                ->where('product_id', $product->id)
+                ->where('status', 'Pending')
+                ->lockForUpdate()
+                ->first();
             abort_if($this->stockForDealer($product, auth()->id()) > 0, 422, 'You already have stock for this item. You cannot request more until all current stock is used.');
-            abort_if($existing && $existing->status === 'Pending', 422, 'This item already has a pending stock request.');
-            DealerStockRequest::updateOrCreate(
-                ['dealer_id' => auth()->id(), 'product_id' => $product->id],
-                ['quantity' => $request->quantity, 'attachments' => $attachments, 'status' => 'Pending', 'remarks' => null, 'reviewed_by' => null, 'reviewed_at' => null, 'approved_order_id' => null]
-            );
+            abort_if($existingPendingRequest, 422, 'This item already has a pending stock request.');
+
+            DealerStockRequest::create([
+                'dealer_id' => auth()->id(),
+                'product_id' => $product->id,
+                'quantity' => $request->quantity,
+                'attachments' => $attachments,
+                'status' => 'Pending',
+                'remarks' => null,
+                'reviewed_by' => null,
+                'reviewed_at' => null,
+                'approved_order_id' => null,
+            ]);
         });
         } catch (\Throwable $exception) {
             $this->deleteAttachments($attachments);
