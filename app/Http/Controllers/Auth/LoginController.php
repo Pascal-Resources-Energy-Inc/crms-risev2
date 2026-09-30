@@ -66,6 +66,8 @@ class LoginController extends Controller
             return $this->errorResponse($request, 'Your account is inactive.');
         }
 
+        $request->session()->regenerate();
+
         return $this->successResponse($request, $user);
     }
 
@@ -106,7 +108,16 @@ class LoginController extends Controller
         if ($request->expectsJson()) {
             return response()->json([
                 'success' => true,
-                'redirect' => $redirect
+                'redirect' => $redirect,
+                // This is intentionally limited to non-sensitive data. The
+                // browser uses it only to identify a previously authenticated
+                // user while the offline pages are open.
+                'user' => [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'role' => $user->role,
+                ],
             ]);
         }
 
