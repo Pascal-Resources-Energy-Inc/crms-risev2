@@ -722,6 +722,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 const result = isJson ? await response.json() : {};
 
                 if (response.ok && result.success) {
+                    // Keep only non-sensitive identity details for the offline
+                    // pages. Passwords and Laravel session tokens are never
+                    // stored in localStorage.
+                    if (result.user && result.user.id) {
+                        const offlineUser = {
+                            id: result.user.id,
+                            name: result.user.name || '',
+                            email: result.user.email || '',
+                            role: result.user.role || '',
+                            loginTime: new Date().toISOString()
+                        };
+
+                        localStorage.setItem('current_user_id', String(offlineUser.id));
+                        localStorage.setItem('current_user_role', offlineUser.role);
+                        localStorage.setItem('current_user_name', offlineUser.name);
+                        localStorage.setItem('current_user_email', offlineUser.email);
+                        localStorage.setItem('offlineUser', JSON.stringify(offlineUser));
+                    }
+
                     Swal.fire({
                         icon: 'success',
                         title: 'Login Successful!',

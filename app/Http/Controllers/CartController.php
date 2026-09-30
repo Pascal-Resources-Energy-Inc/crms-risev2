@@ -11,6 +11,11 @@ use Illuminate\Http\Request;
 
 class CartController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
     // public function index(Request $request)
     // {
     //     $customers = Client::whereHas('serial')->get();
@@ -107,10 +112,12 @@ class CartController extends Controller
         $user = auth()->user();
         $dealer = $user->dealer;
 
-        $dealerLat = $dealer->latitude;
-        $dealerLng = $dealer->longitude;
+        $dealerLat = optional($dealer)->latitude;
+        $dealerLng = optional($dealer)->longitude;
 
-        $customersQuery = Client::whereHas('serial');
+        // Include every client in the dealer's MFI; a stove/serial record is
+        // not required to appear in the customer selector.
+        $customersQuery = Client::query();
 
         if ($user->role === 'Dealer') {
             $dealerMfi = trim((string) optional($dealer)->mfi);

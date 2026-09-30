@@ -18,6 +18,11 @@ use Illuminate\Support\Facades\Log;
 
 class ProductController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
     public function index()
     {
         // dd(auth()->user()->dealer);
@@ -39,7 +44,9 @@ class ProductController extends Controller
         
         // $products = Product::with('adProduct.areas')->where('status', 'Activate')->orderBy('created_at', 'desc')->get();
         
-        $customersQuery = Client::whereHas('serial');
+        // Include every client in the dealer's MFI; a stove/serial record is
+        // not required to appear in the customer selector.
+        $customersQuery = Client::query();
 
         if (auth()->user()->role === 'Dealer') {
             $dealerMfi = trim((string) $userDealer->mfi);
