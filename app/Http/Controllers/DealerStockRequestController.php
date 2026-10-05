@@ -17,7 +17,7 @@ class DealerStockRequestController extends Controller
 
     public function store(Request $request)
     {
-        abort_unless(auth()->user()->role === 'Dealer', 403);
+        abort_unless(auth()->user()->isDealerLike(), 403);
         $request->validate([
             'product_id' => 'required|integer|exists:dms.products,id',
             'quantity' => 'required|integer|min:1|max:100000',
@@ -79,7 +79,9 @@ class DealerStockRequestController extends Controller
             $order->transaction_id = 'STK-' . str_pad(($last ? $last->id : 0) + 1, 6, '0', STR_PAD_LEFT);
             $order->item_description = $product->description;
             $order->qty = $stockRequest->quantity;
-            $order->price = $product->dealer_price ?? $product->price ?? 0;
+            $order->price = optional($stockRequest->dealer)->usesSrpPricing()
+                ? ($product->srp_price ?? $product->price ?? 0)
+                : ($product->dealer_price ?? $product->price ?? 0);
             $order->date = now()->toDateString();
             $order->dealer_id = $stockRequest->dealer_id;
             $order->created_by = auth()->id();

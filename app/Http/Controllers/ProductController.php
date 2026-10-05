@@ -25,8 +25,9 @@ class ProductController extends Controller
 
     public function index()
     {
+        $user = auth()->user();
         // dd(auth()->user()->dealer);
-        $userDealer = optional(auth()->user()->dealer);
+        $userDealer = optional($user->dealer);
         // dd($userDealer);
         $products = Product::with(['adProduct.areas'])
             ->where('status', 'Activate')
@@ -48,11 +49,13 @@ class ProductController extends Controller
         // not required to appear in the customer selector.
         $customersQuery = Client::query();
 
-        if (auth()->user()->role === 'Dealer') {
-            $dealerMfi = trim((string) $userDealer->mfi);
+        if ($user->isDealerLike()) {
+            $dealerMfi = $user->usesSrpPricing()
+                ? trim((string) optional($user->centerChief)->mfi)
+                : trim((string) $userDealer->mfi);
 
-            // A dealer must only select customers assigned to the same MFI.
-            // Do not fall back to all customers when the dealer has no MFI.
+            // A Center Chief uses the MFI registered in center_chiefs. Never
+            // fall back to all customers when an operational MFI is missing.
             if ($dealerMfi === '') {
                 $customersQuery->whereRaw('1 = 0');
             } else {
@@ -68,12 +71,12 @@ class ProductController extends Controller
 
         if (auth()->user()->role == "Admin") {
             $transactions = TransactionDetail::get();
-        } elseif (auth()->user()->role == "Dealer") {
+        } elseif (auth()->user()->isDealerLike()) {
             $transactions = TransactionDetail::where('dealer_id', auth()->user()->id)->get();
         }
 
         $dealerProfile = null;
-        if (auth()->user()->role == "Dealer") {
+        if (auth()->user()->isDealerLike()) {
             $dealerProfile = Dealer::where('user_id', auth()->user()->id)->first();
         }
 
@@ -141,6 +144,8 @@ class ProductController extends Controller
         $role = strtolower(str_replace([' ', '-'], '_', optional($user)->role ?? 'client'));
         $priceColumn = [
             'dealer' => 'dealer_price',
+            'center_chief' => 'srp_price',
+            'centerchief' => 'srp_price',
             'mega_dealer' => 'mega_dealer_price',
         ][$role] ?? 'price';
 
@@ -184,7 +189,7 @@ class ProductController extends Controller
             'inStockCount' => $inventoryItems->where('dealer_stock', '>', 0)->count(),
             'lowStockCount' => $inventoryItems->where('status', 'low')->count(),
             'outStockCount' => $inventoryItems->where('status', 'out')->count(),
-            'stockRequests' => $user->role === 'Dealer'
+            'stockRequests' => $user->isDealerLike()
                 ? DealerStockRequest::where('dealer_id', $user->id)->latest()->get()->unique('product_id')->keyBy('product_id')
                 : collect(),
         ]);
@@ -213,6 +218,8 @@ class ProductController extends Controller
         $role = strtolower(str_replace([' ', '-'], '_', optional($user)->role ?? 'client'));
         $priceColumn = [
             'dealer' => 'dealer_price',
+            'center_chief' => 'srp_price',
+            'centerchief' => 'srp_price',
             'mega_dealer' => 'mega_dealer_price',
         ][$role] ?? 'price';
         $price = (float) ($product->{$priceColumn} ?? $product->price ?? 0);
@@ -372,7 +379,7 @@ class ProductController extends Controller
                         $query->orWhereIn('sku', $productSkus);
                     }
                 })
-                ->when(auth()->user()->role == "Dealer", function ($query) {
+                ->when(auth()->user()->isDealerLike(), function ($query) {
                     $query->where('dealer_id', auth()->id());
                 })
                 ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
@@ -433,7 +440,7 @@ class ProductController extends Controller
         if (Schema::hasTable('order_details')) {
             $dealerCompletedOrders = $completedOrders;
 
-            if (auth()->user()->role == "Dealer") {
+            if (auth()->user()->isDealerLike()) {
                 $dealerCompletedOrders = $dealerCompletedOrders->where('dealer_id', auth()->id());
             }
 

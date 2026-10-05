@@ -1249,8 +1249,8 @@
     function redirectToOfflineMode() {
         const getBasePath = () => {
             const path = window.location.pathname;
-            if (path.includes('/crms/public')) {
-                return '/crms/public';
+            if (path.includes('/crms-risev2/public')) {
+                return '/crms-risev2/public';
             }
             return '';
         };
@@ -1354,7 +1354,7 @@
     @yield('content')
 
     @if (!request()->is(['account', 'history', 'cart', 'place_order', 'rewards', 'redeem', 'voucher', 'chat', 'notification', 'settlement', 'points-history', 'notifications/*']))
-    @if(auth()->user()->role == "Dealer")
+    @if(auth()->user()->isDealerLike())
     <a href="{{ url('cart') }}" class="floating-cart-btn" id="floatingCartBtn">
         <i class="bi bi-cart cart-icon"></i>
         <div class="" id="floatingCartBadge">0</div>
@@ -1378,7 +1378,7 @@
         </a>
         @endif
 
-        @if(auth()->user()->role == "Dealer")
+        @if(auth()->user()->isDealerLike())
         <a href="{{url('/products')}}" class="nav-item {{ request()->is('products') ? 'active' : '' }}">
             <i class="bi bi-bag"></i>
             <span class="under">Products</span>

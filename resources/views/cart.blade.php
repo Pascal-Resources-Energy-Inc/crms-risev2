@@ -1247,6 +1247,7 @@
 
 @section('javascript')
 <script>
+    const usesSrpPricing = @json(auth()->user()->usesSrpPricing());
 
     function showSuccessMessage(message) {
         const toast = document.createElement('div');
@@ -2090,7 +2091,7 @@
                                     ${colorIndicatorHTML}
                                     <div class="item-price">₱ ${item.price.toFixed(2)}</div>
                                     <span class="item-price-type ${item.priceType === 'dealer' ? 'is-dealer' : ''}">
-                                        ${item.priceType === 'dealer' ? 'Dealer price' : 'Regular price'}
+                                        ${item.priceType === 'srp' ? 'SRP' : (item.priceType === 'dealer' ? 'Dealer price' : 'Regular price')}
                                     </span>
                                     <div class="item-quantity">
                                         <button class="quantity-btn minus-btn" data-id="${item.id}">−</button>
@@ -2300,7 +2301,9 @@
 
             const isOrder = transactionType === 'ad_order';
             note.classList.toggle('is-order', isOrder);
-            note.innerHTML = isOrder
+            note.innerHTML = usesSrpPricing
+                ? '<i class="bi bi-tag-fill"></i><div><strong>SRP pricing</strong><span>Suggested retail price is applied to every product.</span></div>'
+                : isOrder
                 ? '<i class="bi bi-building-fill"></i><div><strong>Order pricing</strong><span>Dealer product price is applied.</span></div>'
                 : '<i class="bi bi-person-check-fill"></i><div><strong>Client pricing</strong><span>Regular product price is applied.</span></div>';
         }
@@ -2311,13 +2314,16 @@
             dealerCartData = dealerCartData.map(item => {
                 const dealerPrice = Number(item.dealerPrice ?? item.price ?? 0);
                 const regularPrice = Number(item.regularPrice ?? item.price ?? 0);
+                const srpPrice = Number(item.srpPrice ?? regularPrice);
+                const priceType = usesSrpPricing ? 'srp' : (isOrder ? 'dealer' : 'regular');
 
                 return {
                     ...item,
                     dealerPrice,
                     regularPrice,
-                    price: isOrder ? dealerPrice : regularPrice,
-                    priceType: isOrder ? 'dealer' : 'regular'
+                    srpPrice,
+                    price: usesSrpPricing ? srpPrice : (isOrder ? dealerPrice : regularPrice),
+                    priceType
                 };
             });
 

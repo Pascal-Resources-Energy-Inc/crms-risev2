@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Dealer;
+use App\CenterChief;
 use App\Client;
 use App\Transaction;
 use App\RedeemedHistory;
@@ -26,7 +27,19 @@ class AccountController extends Controller
         $transactions_details = collect();
         $availablePoints = 0;
 
-        if ($user->role == "Dealer") {
+        if ($user->usesSrpPricing()) {
+            $profile = CenterChief::where('user_id', $user->id)->first();
+            $transactions_details = TransactionDetail::where('dealer_id', $user->id)
+                ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
+                    $query->where('status', 'Completed');
+                })
+                ->orderBy('id', 'desc')
+                ->get();
+
+            $totalEarnedPoints = $transactions_details->sum('points_dealer');
+            $redeemedPoints = abs(RedeemedHistory::where('user_id', $user->id)->sum('points_amount'));
+            $availablePoints = $totalEarnedPoints - $redeemedPoints;
+        } elseif ($user->isDealerLike()) {
             $profile = Dealer::with('sales')->where('user_id', $user->id)->first();
             $transactions_details = TransactionDetail::where('dealer_id', $user->id)
                 ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
@@ -102,7 +115,22 @@ class AccountController extends Controller
 
         $user->save();
 
-        if ($user->role == "Dealer") {
+        if ($user->usesSrpPricing()) {
+            $profile = CenterChief::where('user_id', $user->id)->firstOrFail();
+            $profile->name = $validated['name'];
+            $profile->email = $validated['email'];
+            $profile->number = $validated['number'] ?? $profile->number;
+            $profile->save();
+
+            // The Dealer record remains an access bridge for dealer features,
+            // but Center Chief profile details are owned by center_chiefs.
+            Dealer::where('user_id', $user->id)->update([
+                'name' => $profile->name,
+                'email_address' => $profile->email,
+                'number' => $profile->number,
+                'updated_at' => now(),
+            ]);
+        } elseif ($user->isDealerLike()) {
             $profile = Dealer::firstOrNew(['user_id' => $user->id]);
             $profile->name = $validated['name'];
             $profile->email_address = $validated['email'];

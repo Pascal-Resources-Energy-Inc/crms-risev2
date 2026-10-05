@@ -1330,7 +1330,7 @@
         return;
       }
 
-      const basePath = window.location.pathname.includes('/crms/public') ? '/crms/public' : '';
+      const basePath = window.location.pathname.includes('/crms-risev2/public') ? '/crms-risev2/public' : '';
       const swPath = `${basePath}/sw.js`;
 
       navigator.serviceWorker.register(swPath, { scope: basePath || '/' })
@@ -1539,7 +1539,7 @@
           Swal.showLoading();
         }
       }).then(() => {
-        const basePath = window.location.pathname.includes('/crms/public') ? '/crms/public' : '';
+        const basePath = window.location.pathname.includes('/crms-risev2/public') ? '/crms-risev2/public' : '';
         const currentUserId = localStorage.getItem('current_user_id');
         const offlineUser = localStorage.getItem('offlineUser');
         

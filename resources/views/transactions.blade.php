@@ -158,7 +158,7 @@ table.dataTable {
 <meta name="csrf-token" content="{{ csrf_token() }}">
 @endsection
 @section('content')
-<div class="welcome @if(auth()->user()->role === 'Dealer') welcome-client @endif">
+<div class="welcome @if(auth()->user()->isDealerLike()) welcome-client @endif">
     <div class="row">
         <!-- Cards Section - All 4 cards in one row -->
         <div class="col-12">

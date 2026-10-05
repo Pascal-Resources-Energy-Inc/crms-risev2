@@ -694,8 +694,8 @@ function startLoadingTasks() {
     if ('serviceWorker' in navigator) {
         const getBasePath = () => {
             const path = window.location.pathname;
-            if (path.includes('/crms/public')) {
-                return '/crms/public';
+            if (path.includes('/crms-risev2/public')) {
+                return '/crms-risev2/public';
             }
             return '';
         };
@@ -1310,8 +1310,8 @@ if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         const getBasePath = () => {
             const path = window.location.pathname;
-            if (path.includes('/crms/public')) {
-                return '/crms/public';
+            if (path.includes('/crms-risev2/public')) {
+                return '/crms-risev2/public';
             }
             return '';
         };
@@ -1533,8 +1533,8 @@ function retryConnection() {
 function redirectToOfflineMode() {
     const getBasePath = () => {
         const path = window.location.pathname;
-        if (path.includes('/crms/public')) {
-            return '/crms/public';
+        if (path.includes('/crms-risev2/public')) {
+            return '/crms-risev2/public';
         }
         return '';
     };

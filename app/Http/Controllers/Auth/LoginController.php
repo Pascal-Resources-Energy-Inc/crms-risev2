@@ -73,14 +73,19 @@ class LoginController extends Controller
 
     protected function validateSelectedRole($request, $user)
     {
-        $selectedRole = strtolower(trim($request->selected_role));
-        $userRole = strtolower(trim($user->role));
+        $selectedRole = $this->normalizeRole($request->selected_role);
+        $userRole = $this->normalizeRole($user->role);
 
         if (!$selectedRole) {
             return true;
         }
 
         return $selectedRole === $userRole;
+    }
+
+    protected function normalizeRole($role)
+    {
+        return strtolower(preg_replace('/[\s_-]+/', '', trim((string) $role)));
     }
 
     protected function isUserInactive($user)

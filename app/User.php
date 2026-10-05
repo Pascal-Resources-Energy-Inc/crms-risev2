@@ -33,6 +33,28 @@ class User extends Authenticatable
     {
         return $this->hasOne(Client::class, 'user_id');
     }
+
+    public function centerChief()
+    {
+        return $this->hasOne(CenterChief::class, 'user_id');
+    }
+
+    /** Center Chiefs use the dealer workspace and operational permissions. */
+    public function isDealerLike()
+    {
+        return in_array($this->normalizedRole(), ['dealer', 'centerchief'], true);
+    }
+
+    /** Center Chiefs must always transact at the suggested retail price. */
+    public function usesSrpPricing()
+    {
+        return $this->normalizedRole() === 'centerchief';
+    }
+
+    private function normalizedRole()
+    {
+        return strtolower(preg_replace('/[\s_-]+/', '', trim((string) $this->role)));
+    }
     
     public function redeemedHistory()
     {

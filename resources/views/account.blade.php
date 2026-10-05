@@ -172,7 +172,7 @@
                     <input type="text" name="facebook" value="{{ old('facebook', $profile->facebook ?? '') }}">
                 </label>
 
-                @if(auth()->user()->role == 'Dealer')
+                @if(auth()->user()->isDealerLike())
                     <label>
                         <span>Store Name</span>
                         <input type="text" name="store_name" value="{{ old('store_name', $profile->store_name ?? '') }}">
@@ -224,10 +224,14 @@
 
         <div class="detail-list">
             <div><span>Role</span><strong>{{ auth()->user()->role }}</strong></div>
+            @if(auth()->user()->usesSrpPricing())
+                <div><span>Chief Reference</span><strong>{{ $profile->chief_reference ?? 'Pending assignment' }}</strong></div>
+                <div><span>MFI</span><strong>{{ $profile->mfi ?? 'Not set' }}</strong></div>
+            @endif
             <div><span>Name</span><strong>{{ $profile->name ?? auth()->user()->name }}</strong></div>
             <div><span>Contact</span><strong>{{ $profile->number ?? 'Not set' }}</strong></div>
             <div><span>Email</span><strong>{{ $profile->email_address ?? auth()->user()->email }}</strong></div>
-            @if(auth()->user()->role == 'Dealer')
+            @if(auth()->user()->isDealerLike())
                 <div><span>Store</span><strong>{{ $profile->store_name ?? 'Not set' }}</strong></div>
                 <div><span>Area</span><strong>{{ $profile->area ?? 'Not set' }}</strong></div>
             @endif

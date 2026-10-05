@@ -104,7 +104,10 @@
       @php
         $dealerStock = (int) ($dealerStockByProduct[$product->id] ?? 0);
         $dealerPrice = $product->dealer_price ?? 0;
-        $regularPrice = $product->price ?? 0;
+        $srpPrice = $product->srp_price ?? $product->price ?? 0;
+        $regularPrice = $product->price ?? $srpPrice;
+        $isCenterChief = auth()->user()->usesSrpPricing();
+        $displayPrice = $isCenterChief ? $srpPrice : $dealerPrice;
         $hasProductImage = !empty($product->product_image);
         $productImageUrl = $hasProductImage
             ? config('app.crms_admin_url') . '/public/uploads/products/' . $product->product_image
@@ -156,6 +159,12 @@
                 <div class="price-add-container">
 
                     <div class="price-details" aria-label="Product prices">
+                        @if($isCenterChief)
+                        <div class="price-block regular-price-block">
+                            <span class="price-label"><i class="bi bi-tag-fill"></i> SRP</span>
+                            <div class="product-price">&#8369; {{ number_format($srpPrice, 2) }}</div>
+                        </div>
+                        @else
                         <div class="price-block dealer-price-block">
                             <span class="price-label"><i class="bi bi-tag-fill"></i> Dealer Price</span>
                             <div class="product-price">&#8369; {{ number_format($dealerPrice, 2) }}</div>
@@ -164,6 +173,7 @@
                             <span class="price-label">Price</span>
                             <div class="regular-price">&#8369; {{ number_format($regularPrice, 2) }}</div>
                         </div>
+                        @endif
                     </div>
 
                     <div class="add-to-cart">
@@ -172,9 +182,10 @@
                             class="add-btn btn btn-primary rounded-circle p-0 d-flex justify-content-center align-items-center"
                             data-id="{{ $product->id }}"
                             data-container="container-{{ $product->id }}"
-                            data-price="{{ $dealerPrice }}"
+                            data-price="{{ $displayPrice }}"
                             data-dealer-price="{{ $dealerPrice }}"
                             data-regular-price="{{ $regularPrice }}"
+                            data-srp-price="{{ $srpPrice }}"
                             data-name="{{ $product->product_name }}"
                             data-image="{{ $productImageUrl ?? asset('images/product-placeholder.svg') }}"
                             data-dealer-stock="{{ $dealerStock }}"
@@ -1970,6 +1981,7 @@
       price: parseFloat(button.getAttribute('data-price')),
       dealerPrice: parseFloat(button.getAttribute('data-dealer-price')),
       regularPrice: parseFloat(button.getAttribute('data-regular-price')),
+      srpPrice: parseFloat(button.getAttribute('data-srp-price')),
       image: button.getAttribute('data-image'),
       containerId: button.getAttribute('data-container') || button.closest('[id^="container-"]')?.id,
       dealerStock: dealerStock

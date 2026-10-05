@@ -42,7 +42,7 @@ class RewardController extends Controller
                 }
             }
 
-            if (auth()->user()->role == "Dealer") {
+            if (auth()->user()->isDealerLike()) {
                 $dealer = Dealer::with('sales')
                     ->where('user_id', auth()->user()->id)
                     ->first();

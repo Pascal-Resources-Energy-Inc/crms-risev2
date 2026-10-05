@@ -119,11 +119,13 @@ class CartController extends Controller
         // not required to appear in the customer selector.
         $customersQuery = Client::query();
 
-        if ($user->role === 'Dealer') {
-            $dealerMfi = trim((string) optional($dealer)->mfi);
+        if ($user->isDealerLike()) {
+            $dealerMfi = $user->usesSrpPricing()
+                ? trim((string) optional($user->centerChief)->mfi)
+                : trim((string) optional($dealer)->mfi);
 
-            // Never expose customers outside the authenticated dealer's MFI.
-            // A dealer without an assigned MFI gets an empty customer list.
+            // Center Chief customer access is based on center_chiefs.mfi.
+            // A missing MFI intentionally produces an empty customer list.
             if ($dealerMfi === '') {
                 $customersQuery->whereRaw('1 = 0');
             } else {
@@ -147,11 +149,13 @@ class CartController extends Controller
         // dd($areaDistributor);
         if ($user->role == "Admin") {
             $transactions = TransactionDetail::get();
-        } elseif ($user->role == "Dealer") {
+        } elseif ($user->isDealerLike()) {
             $transactions = TransactionDetail::where('dealer_id', $user->id)->get();
         }
 
-        $center = optional($dealer)->area;
+        $center = $user->usesSrpPricing()
+            ? trim((string) optional($user->centerChief)->area)
+            : trim((string) optional($dealer)->area);
         
         // ✅ STEP 1: compute ALL ADs with distance
         $adsWithDistance = $areaDistributor->map(function ($ad) use ($dealerLat, $dealerLng) {
@@ -172,9 +176,11 @@ class CartController extends Controller
 
         // Keep every AD assigned to the dealer's area. Coordinates are optional;
         // when present, they only determine the display order.
-        $matchedADs = $center
+        $matchedADs = $center !== ''
             ? $adsWithDistance->filter(function ($ad) use ($center) {
-                return $ad->areas->contains('area_name', $center);
+                return $ad->areas->contains(function ($area) use ($center) {
+                    return strtolower(trim((string) $area->area_name)) === strtolower($center);
+                });
             })->values()
             : collect();
 
@@ -182,10 +188,11 @@ class CartController extends Controller
             ->sortBy(fn ($ad) => $ad->distance === null ? PHP_FLOAT_MAX : $ad->distance)
             ->values();
 
-        // If no AD is assigned to the dealer's area, let the dealer choose from all ADs.
-        $availableADs = $matchedADs->isNotEmpty()
+        // A Center Chief must remain within the territory defined on their
+        // center_chiefs profile. Dealers retain their current fallback.
+        $availableADs = $user->usesSrpPricing()
             ? $matchedADs
-            : $areaDistributor;
+            : ($matchedADs->isNotEmpty() ? $matchedADs : $areaDistributor);
 
         return view('cart', [
             'transactions' => $transactions,

@@ -46,7 +46,7 @@
 @endsection
 
 @section('content')
-<div class="welcome @if(auth()->user()->role === 'Dealer' || auth()->user()->role === 'Client') welcome-client @endif">
+<div class="welcome @if(auth()->user()->isDealerLike() || auth()->user()->role === 'Client') welcome-client @endif">
      <!-- Customer Info Section -->
      <div class="row">
         <div class="col-md-4">
@@ -188,7 +188,7 @@
     </div>
     
     <!-- Modals -->
-    @if(auth()->user()->role == "Dealer")
+    @if(auth()->user()->isDealerLike())
         @php
             $dealer = $profile;
         @endphp

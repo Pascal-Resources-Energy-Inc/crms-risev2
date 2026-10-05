@@ -15,7 +15,7 @@ class PointsHistoryController extends Controller
         $user = Auth::user();
         
         // Get transactions based on user role
-        if ($user->role === 'Dealer') {
+        if ($user->isDealerLike()) {
             // For dealers, show transactions they created
             $earnedPoints = TransactionDetail::where('dealer_id', $user->id)
                 ->orderBy('created_at', 'desc')

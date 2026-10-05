@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 use App\Transaction;
 use App\Dealer;
+use App\CenterChief;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use App\Client;
@@ -37,6 +38,7 @@ class HomeController extends Controller
     {
         $dealer = "";
         $customer = "";
+        $centerChief = null;
         $threeDaysAgo = Carbon::now()->subDays(7)->toDateString();
         
         // Get selected year and month from request
@@ -89,10 +91,13 @@ class HomeController extends Controller
             ->get();
         // dd($ad_transactions);
 
-        if (auth()->user()->role === 'Dealer') {
+        if (auth()->user()->isDealerLike()) {
             $userId = auth()->id();
 
             $dealer = Dealer::with('sales')->where('user_id', $userId)->first();
+            $centerChief = auth()->user()->usesSrpPricing()
+                ? CenterChief::where('user_id', $userId)->first()
+                : null;
 
             $transactions_raw = TransactionDetail::where('dealer_id', $userId)
                 ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
@@ -281,6 +286,7 @@ class HomeController extends Controller
                 'qty' =>  $qty,
                 'customers' =>  $customers,
                 'dealer' =>  $dealer,
+                'center_chief' => $centerChief,
                 'customer' =>  $customer,
                 'customers_less' =>  $customers_less,
                 'total_sales' => $total_sales,
