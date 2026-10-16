@@ -111,9 +111,7 @@ class CartController extends Controller
     {
         $user = auth()->user();
         $dealer = $user->dealer;
-
-        $dealerLat = optional($dealer)->latitude;
-        $dealerLng = optional($dealer)->longitude;
+        [$originLat, $originLng] = $this->distanceOriginFor($user, $dealer);
 
         // Include every client in the dealer's MFI; a stove/serial record is
         // not required to appear in the customer selector.
@@ -158,12 +156,13 @@ class CartController extends Controller
             : trim((string) optional($dealer)->area);
         
         // ✅ STEP 1: compute ALL ADs with distance
-        $adsWithDistance = $areaDistributor->map(function ($ad) use ($dealerLat, $dealerLng) {
+        $adsWithDistance = $areaDistributor->map(function ($ad) use ($originLat, $originLng) {
 
-            if ($ad->latitude && $ad->longitude && $dealerLat && $dealerLng) {
+            if (is_numeric($ad->latitude) && is_numeric($ad->longitude) &&
+                is_numeric($originLat) && is_numeric($originLng)) {
                 $ad->distance = $this->calculateDistance(
-                    $dealerLat,
-                    $dealerLng,
+                    $originLat,
+                    $originLng,
                     $ad->latitude,
                     $ad->longitude
                 );
@@ -206,9 +205,95 @@ class CartController extends Controller
         ]);
     }
 
+    /**
+     * Center Chief distances must originate from the Center Chief profile,
+     * not the legacy dealer compatibility record.
+     */
+    private function distanceOriginFor($user, $dealer)
+    {
+        if ($user->usesSrpPricing()) {
+            return $this->centerChiefCoordinates($user->centerChief);
+        }
+
+        return [optional($dealer)->latitude, optional($dealer)->longitude];
+    }
+
+    /**
+     * Resolve a Center Chief's structured profile address once, then retain
+     * its coordinates for later distance calculations.
+     */
+    private function centerChiefCoordinates($centerChief)
+    {
+        if (!$centerChief) {
+            return [null, null];
+        }
+
+        if (is_numeric($centerChief->latitude) && is_numeric($centerChief->longitude)) {
+            return [(float) $centerChief->latitude, (float) $centerChief->longitude];
+        }
+
+        $address = collect([
+            $centerChief->street_address,
+            $centerChief->location_barangay,
+            $centerChief->location_city,
+            $centerChief->location_province,
+            $centerChief->location_region,
+            'Philippines',
+        ])->filter()->implode(', ');
+
+        $coordinates = $this->geocodeAddress($address);
+
+        if ($coordinates === null) {
+            return [null, null];
+        }
+
+        [$latitude, $longitude] = $coordinates;
+        $centerChief->latitude = $latitude;
+        $centerChief->longitude = $longitude;
+        $centerChief->save();
+
+        return $coordinates;
+    }
+
+    /**
+     * Use OpenStreetMap's geocoder only when profile coordinates have not
+     * yet been stored. The result is cached on the Center Chief profile.
+     */
+    private function geocodeAddress($address)
+    {
+        if (trim($address) === '') {
+            return null;
+        }
+
+        $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
+            'q' => $address,
+            'format' => 'jsonv2',
+            'limit' => 1,
+            'countrycodes' => 'ph',
+        ]);
+
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'timeout' => 5,
+                'header' => "User-Agent: CRMS-RISE/1.0\r\nAccept: application/json\r\n",
+            ],
+        ]);
+        $response = @file_get_contents($url, false, $context);
+        $results = $response === false ? null : json_decode($response, true);
+
+        if (!is_array($results) || empty($results[0]) ||
+            !isset($results[0]['lat'], $results[0]['lon']) ||
+            !is_numeric($results[0]['lat']) || !is_numeric($results[0]['lon'])) {
+            return null;
+        }
+
+        return [(float) $results[0]['lat'], (float) $results[0]['lon']];
+    }
+
     private function calculateDistance($lat1, $lon1, $lat2, $lon2)
     {
-        if (!$lat1 || !$lon1 || !$lat2 || !$lon2) {
+        if (!is_numeric($lat1) || !is_numeric($lon1) || !is_numeric($lat2) || !is_numeric($lon2)) {
             return null;
         }
 

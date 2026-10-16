@@ -17,6 +17,14 @@ use Illuminate\Support\Facades\Schema;
 use RealRashid\SweetAlert\Facades\Alert;
 class TransactionController extends Controller
 {
+    /**
+     * Transaction pricing and territory access always require a signed-in user.
+     */
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
     // public function index(Request $request)
     // {
     //     $customers = Client::whereHas('serial')->get();
@@ -150,8 +158,8 @@ class TransactionController extends Controller
             $transaction->points_client = $isGuestTransaction ? 0 : $item->customer_points * $request->qty;
             $transaction->item_description = $item->description;
             $transaction->qty = $request->qty;
-            // Center Chiefs always use SRP. This is assigned on the server
-            // rather than trusting the browser cart price.
+            // Client transactions always use the regular product price.
+            // This is assigned on the server rather than trusting the cart.
             $transaction->price = $user->usesSrpPricing()
                 ? ($item->srp_price ?? $item->price ?? 0)
                 : ($item->price ?? 0);
@@ -261,10 +269,12 @@ class TransactionController extends Controller
             // $transaction->points_client = $item->customer_points * $request->qty;
             $transaction->item_description = $item->description;
             $transaction->qty = $request->qty;
-            // Center Chiefs always use SRP, including Area Distributor orders.
+            // Role-specific pricing is enforced for Area Distributor orders.
             $transaction->price = $dealer->usesSrpPricing()
                 ? ($item->srp_price ?? $item->price ?? 0)
-                : ($item->dealer_price ?? $item->price ?? 0);
+                : ($dealer->usesMegaDealerPricing()
+                    ? ($item->mega_dealer_price ?? $item->dealer_price ?? $item->price ?? 0)
+                    : ($item->dealer_price ?? $item->price ?? 0));
 
             $transaction->ad_id = $request->area_distributor_id;
             // $transaction->ad_id = $ad->user_id; // ✅ SAVE USER ID (NOT AD ID)

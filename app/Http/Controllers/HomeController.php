@@ -57,7 +57,7 @@ class HomeController extends Controller
         ->get();
 
         $customers = Client::whereHas('transactions')->get();
-        $transactions = Transaction::orderBy('id','desc')->get();
+        // $transactions = Transaction::orderBy('id','desc')->get();
         $dealers = Dealer::get();
         $client_transaction_feed = TransactionDetail::with('customer')
             ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
@@ -277,7 +277,7 @@ class HomeController extends Controller
 
         return view('home',
             array(
-                'transactions' => $transactions,
+                // 'transactions' => $transactions,
                 'transactions_details' => $transactions_details,
                 'client_transaction_feed' => $client_transaction_feed,
                 'ad_transactions' => $ad_transactions,

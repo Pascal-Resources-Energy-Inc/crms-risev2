@@ -404,11 +404,16 @@
                                     Name: {{ $center_chief->name }} <br>
                                     Contact No.: {{ $center_chief->number ?? 'Not set' }} <br>
                                     MFI: {{ $center_chief->mfi }} <br>
-                                    @else
+                                    @elseif($dealer)
                                     Dealer ID: {{date('Y',strtotime($dealer->created_at))}}-{{$dealer->id}}<br>
                                     Name: {{$dealer->name}} <br>
                                     Contact No.: {{$dealer->number}} <br>
                                     Registered: {{date('M d,Y',strtotime($dealer->created_at))}} <br>
+                                    @else
+                                    Dealer ID: {{ auth()->id() }}<br>
+                                    Name: {{ auth()->user()->name }} <br>
+                                    Contact No.: Not set <br>
+                                    Registered: {{ optional(auth()->user()->created_at)->format('M d, Y') ?? 'Not set' }} <br>
                                     @endif
                                 </div>
                             </div>

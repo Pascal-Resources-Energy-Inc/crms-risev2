@@ -39,16 +39,22 @@ class User extends Authenticatable
         return $this->hasOne(CenterChief::class, 'user_id');
     }
 
-    /** Center Chiefs use the dealer workspace and operational permissions. */
+    /** Dealer-facing roles use the dealer workspace and operational permissions. */
     public function isDealerLike()
     {
-        return in_array($this->normalizedRole(), ['dealer', 'centerchief'], true);
+        return in_array($this->normalizedRole(), ['dealer', 'megadealer', 'centerchief'], true);
     }
 
     /** Center Chiefs must always transact at the suggested retail price. */
     public function usesSrpPricing()
     {
         return $this->normalizedRole() === 'centerchief';
+    }
+
+    /** Mega Dealers receive the dedicated Mega Dealer product price. */
+    public function usesMegaDealerPricing()
+    {
+        return $this->normalizedRole() === 'megadealer';
     }
 
     private function normalizedRole()

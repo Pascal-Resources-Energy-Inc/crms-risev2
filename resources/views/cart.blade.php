@@ -1248,6 +1248,7 @@
 @section('javascript')
 <script>
     const usesSrpPricing = @json(auth()->user()->usesSrpPricing());
+    const usesMegaDealerPricing = @json(auth()->user()->usesMegaDealerPricing());
 
     function showSuccessMessage(message) {
         const toast = document.createElement('div');
@@ -2091,7 +2092,7 @@
                                     ${colorIndicatorHTML}
                                     <div class="item-price">₱ ${item.price.toFixed(2)}</div>
                                     <span class="item-price-type ${item.priceType === 'dealer' ? 'is-dealer' : ''}">
-                                        ${item.priceType === 'srp' ? 'SRP' : (item.priceType === 'dealer' ? 'Dealer price' : 'Regular price')}
+                                        ${item.priceType === 'srp' ? 'SRP' : (item.priceType === 'mega_dealer' ? 'Mega Dealer price' : (item.priceType === 'dealer' ? 'Dealer price' : 'Regular price'))}
                                     </span>
                                     <div class="item-quantity">
                                         <button class="quantity-btn minus-btn" data-id="${item.id}">−</button>
@@ -2303,6 +2304,8 @@
             note.classList.toggle('is-order', isOrder);
             note.innerHTML = usesSrpPricing
                 ? '<i class="bi bi-tag-fill"></i><div><strong>SRP pricing</strong><span>Suggested retail price is applied to every product.</span></div>'
+                : usesMegaDealerPricing && isOrder
+                ? '<i class="bi bi-tag-fill"></i><div><strong>Mega Dealer pricing</strong><span>Mega Dealer product price is applied.</span></div>'
                 : isOrder
                 ? '<i class="bi bi-building-fill"></i><div><strong>Order pricing</strong><span>Dealer product price is applied.</span></div>'
                 : '<i class="bi bi-person-check-fill"></i><div><strong>Client pricing</strong><span>Regular product price is applied.</span></div>';
@@ -2310,19 +2313,22 @@
 
         window.updateTransactionPricing = function(transactionType) {
             const isOrder = transactionType === 'ad_order';
+            const useMegaDealerPrice = usesMegaDealerPricing && isOrder;
 
             dealerCartData = dealerCartData.map(item => {
                 const dealerPrice = Number(item.dealerPrice ?? item.price ?? 0);
                 const regularPrice = Number(item.regularPrice ?? item.price ?? 0);
                 const srpPrice = Number(item.srpPrice ?? regularPrice);
-                const priceType = usesSrpPricing ? 'srp' : (isOrder ? 'dealer' : 'regular');
+                const megaDealerPrice = Number(item.megaDealerPrice ?? item.dealerPrice ?? item.price ?? 0);
+                const priceType = usesSrpPricing ? 'srp' : (useMegaDealerPrice ? 'mega_dealer' : (isOrder ? 'dealer' : 'regular'));
 
                 return {
                     ...item,
                     dealerPrice,
                     regularPrice,
                     srpPrice,
-                    price: usesSrpPricing ? srpPrice : (isOrder ? dealerPrice : regularPrice),
+                    megaDealerPrice,
+                    price: usesSrpPricing ? srpPrice : (useMegaDealerPrice ? megaDealerPrice : (isOrder ? dealerPrice : regularPrice)),
                     priceType
                 };
             });

@@ -11,6 +11,14 @@ use Illuminate\Support\Facades\Storage;
 
 class RewardController extends Controller
 {
+    /**
+     * Rewards and redemptions always belong to the signed-in user.
+     */
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
     public function index()
         {
             // Get all rewards

@@ -121,9 +121,15 @@
       <div class="details-modal__dialog">
         <div class="details-modal__header">
           <h2 class="details-modal__title">Transaction Details</h2>
-          <button class="details-modal__close btn btn-link p-0" onclick="closeDetailsModal()">
-            <i class="bi bi-x"></i>
-          </button>
+          <div class="details-modal__actions">
+            <button type="button" class="details-modal__print" id="printReceiptButton" onclick="printTransactionReceipt()" disabled>
+              <i class="bi bi-printer"></i>
+              <span>Print receipt</span>
+            </button>
+            <button class="details-modal__close btn btn-link p-0" onclick="closeDetailsModal()" aria-label="Close transaction details">
+              <i class="bi bi-x"></i>
+            </button>
+          </div>
         </div>
 
         <div class="details-modal__body" id="detailsContent">
@@ -474,6 +480,37 @@
     top: 0;
     background: #fff;
     z-index: 1;
+  }
+
+  .details-modal__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .details-modal__print {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 34px;
+    padding: 7px 11px;
+    border: 1px solid #b8dff3;
+    border-radius: 8px;
+    background: #edf8fe;
+    color: #087da9;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .details-modal__print:hover:not(:disabled) {
+    border-color: #69b8da;
+    background: #dff3fc;
+  }
+
+  .details-modal__print:disabled {
+    cursor: not-allowed;
+    opacity: .55;
   }
 
   .details-modal__title {
@@ -894,14 +931,19 @@
     container.innerHTML = html;
     }
 
+    let selectedTransactionForReceipt = null;
+
     function openDetailsModal(transactionId) {
     const modal = document.getElementById('detailsModal');
     const content = document.getElementById('detailsContent');
+    const printButton = document.getElementById('printReceiptButton');
 
     // Find transaction data
     const transaction = transactionsData.find(t => t.id === transactionId);
 
     if (transaction) {
+        selectedTransactionForReceipt = transaction;
+        printButton.disabled = false;
         content.innerHTML = `
         <div class="detail-section">
             <div class="detail-section__title">Transaction Information</div>
@@ -977,6 +1019,9 @@
           </div>
         </div> -->
         `;
+    } else {
+        selectedTransactionForReceipt = null;
+        printButton.disabled = true;
     }
 
     modal.classList.add('active');
@@ -986,6 +1031,82 @@
     function closeDetailsModal() {
     document.getElementById('detailsModal').classList.remove('active');
     document.body.style.overflow = '';
+    }
+
+    function printTransactionReceipt() {
+      const transaction = selectedTransactionForReceipt;
+
+      if (!transaction) return;
+
+      const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      }[character]));
+      const money = (value) => `₱${Number(value || 0).toLocaleString('en-PH', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      })}`;
+      const receiptWindow = window.open('', 'transaction-receipt', 'width=440,height=720');
+
+      if (!receiptWindow) {
+        window.alert('Please allow pop-ups to print this receipt.');
+        return;
+      }
+
+      receiptWindow.document.write(`<!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>Receipt ${escapeHtml(transaction.transaction_id)}</title>
+            <style>
+              @page { size: 80mm auto; margin: 4mm; }
+              * { box-sizing: border-box; }
+              body { width: 72mm; margin: 0 auto; color: #172033; font-family: Arial, sans-serif; font-size: 11px; }
+              .receipt { padding: 4mm 0; }
+              .brand { margin-bottom: 3mm; color: #111827; font-size: 19px; font-weight: 800; text-align: center; }
+              .subtitle { margin-bottom: 4mm; color: #667085; font-size: 10px; text-align: center; }
+              .receipt-title { margin: 0 0 4mm; padding: 3mm 0; border-top: 1px dashed #94a3b8; border-bottom: 1px dashed #94a3b8; font-size: 13px; font-weight: 800; text-align: center; text-transform: uppercase; }
+              .row { display: flex; justify-content: space-between; gap: 8px; padding: 1.5mm 0; }
+              .label { color: #667085; }
+              .value { max-width: 43mm; font-weight: 700; text-align: right; word-break: break-word; }
+              .section { margin-top: 4mm; padding-top: 3mm; border-top: 1px dashed #cbd5e1; }
+              .section-title { margin-bottom: 2mm; color: #475467; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+              .total { margin-top: 3mm; padding-top: 3mm; border-top: 1px solid #64748b; color: #087da9; font-size: 14px; font-weight: 800; }
+              .footer { margin-top: 6mm; color: #667085; font-size: 10px; text-align: center; }
+            </style>
+          </head>
+          <body>
+            <main class="receipt">
+              <div class="brand">Gaz Lite</div>
+              <div class="subtitle">Transaction Receipt</div>
+              <div class="receipt-title">Receipt #${escapeHtml(transaction.transaction_id)}</div>
+              <div class="row"><span class="label">Date &amp; time</span><span class="value">${escapeHtml(transaction.created_at)}</span></div>
+              <div class="row"><span class="label">Payment</span><span class="value">${escapeHtml(transaction.payment_method)}</span></div>
+              <div class="row"><span class="label">Status</span><span class="value">${escapeHtml(transaction.status)}</span></div>
+              <section class="section">
+                <div class="section-title">Customer</div>
+                <div class="row"><span class="label">Name</span><span class="value">${escapeHtml(transaction.customer_name)}</span></div>
+                <div class="row"><span class="label">Dealer</span><span class="value">${escapeHtml(transaction.dealer_name)}</span></div>
+              </section>
+              <section class="section">
+                <div class="section-title">Item</div>
+                <div class="row"><span class="label">Product</span><span class="value">${escapeHtml(transaction.item)}</span></div>
+                <div class="row"><span class="label">Description</span><span class="value">${escapeHtml(transaction.item_description)}</span></div>
+                <div class="row"><span class="label">Unit price</span><span class="value">${money(transaction.price)}</span></div>
+                <div class="row"><span class="label">Quantity</span><span class="value">${escapeHtml(transaction.qty)}</span></div>
+                <div class="row total"><span>Total</span><span>${money(transaction.total)}</span></div>
+              </section>
+              <div class="footer">Thank you for choosing Gaz Lite.</div>
+            </main>
+          </body>
+        </html>`);
+      receiptWindow.document.close();
+      receiptWindow.focus();
+      receiptWindow.onload = () => receiptWindow.print();
     }
 
     // Handle radio button changes

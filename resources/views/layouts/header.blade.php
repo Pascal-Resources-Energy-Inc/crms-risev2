@@ -196,7 +196,7 @@
             cursor: pointer;
             transition: all 0.2s ease;
             min-width: 160px;
-            
+            text-decoration: none;
         }
 
         .points-btn:hover {
@@ -1338,14 +1338,14 @@
                 @endif
             </button>
 
-            {{-- <div class="dropdown points-dropdown">
-                <button class="points-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="window.location.href='{{url('rewards')}}'">
+            <div class="points-dropdown">
+                <a class="points-btn" href="{{ url('rewards') }}" aria-label="View rewards and available points">
                     <div class="points-icon-wrapper">
-                        <img src="{{url('images/icon.png')}}" alt="Profile" class="profile-img">
+                        <img src="{{ url('images/icon.png') }}" alt="Points" class="profile-img">
                     </div>
-                    <span class="points-text">{{ $availablePoints ?? 0 }} points</span>
-                </button>
-            </div> --}}
+                    <span class="points-text">{{ number_format(max(0, (int) ($availablePoints ?? 0))) }} points</span>
+                </a>
+            </div>
         </div>
     </header>
     @endif

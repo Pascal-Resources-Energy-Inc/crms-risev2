@@ -10,6 +10,14 @@ use Carbon\Carbon;
 
 class PointsHistoryController extends Controller
 {
+    /**
+     * Point history is only available for an authenticated account.
+     */
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
     public function index()
     {
         $user = Auth::user();

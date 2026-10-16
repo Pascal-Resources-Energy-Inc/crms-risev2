@@ -29,15 +29,10 @@ class ProductController extends Controller
         // dd(auth()->user()->dealer);
         $userDealer = optional($user->dealer);
         // dd($userDealer);
-        $products = Product::with(['adProduct.areas'])
-            ->where('status', 'Activate')
-            // ->whereNotNull('dealer_price')
-            ->when($userDealer->area, function ($query) use ($userDealer) {
-                $query->whereHas('adProduct.areas', function ($q) use ($userDealer) {
-                    $q->where('area_name', $userDealer->area)
-                        ->whereNull('deleted_at');
-                });
-            })
+        $products = $this->applySalesTerritoryFilter(
+            Product::with(['adProduct.areas'])->where('status', 'Activate'),
+            $user
+        )
             ->latest()
             ->get();  
 
@@ -94,17 +89,14 @@ class ProductController extends Controller
 
     public function stockSummary()
     {
-        $userDealer = optional(auth()->user()->dealer);
+        $user = auth()->user();
 
-        $products = Product::with(['adProduct.areas'])
+        $products = $this->applySalesTerritoryFilter(
+            Product::with(['adProduct.areas'])
             ->where('status', 'Activate')
-            ->whereNotNull('dealer_price')
-            ->when($userDealer->area, function ($query) use ($userDealer) {
-                $query->whereHas('adProduct.areas', function ($q) use ($userDealer) {
-                    $q->where('area_name', $userDealer->area)
-                        ->whereNull('deleted_at');
-                });
-            })
+            ->whereNotNull('dealer_price'),
+            $user
+        )
             ->latest()
             ->get();
 
@@ -128,14 +120,10 @@ class ProductController extends Controller
         $user = auth()->user();
         $userDealer = optional($user->dealer);
 
-        $products = Product::with(['adProduct.areas'])
-            ->where('status', 'Activate')
-            ->when($userDealer->area, function ($query) use ($userDealer) {
-                $query->whereHas('adProduct.areas', function ($q) use ($userDealer) {
-                    $q->where('area_name', $userDealer->area)
-                        ->whereNull('deleted_at');
-                });
-            })
+        $products = $this->applySalesTerritoryFilter(
+            Product::with(['adProduct.areas'])->where('status', 'Activate'),
+            $user
+        )
             ->orderBy('product_name')
             ->get();
 
@@ -198,7 +186,10 @@ class ProductController extends Controller
     public function dealerStockTransactions($id)
     {
         $user = auth()->user();
-        $product = Product::with(['adProduct.areas'])->findOrFail($id);
+        $product = $this->applySalesTerritoryFilter(
+            Product::with(['adProduct.areas']),
+            $user
+        )->findOrFail($id);
         $productNames = collect([$product->product_name, $product->description])
             ->filter()
             ->unique()
@@ -331,7 +322,7 @@ class ProductController extends Controller
         $dealerTransactions = collect();
         $selectedAd = $selectedAdId ? AreaDistributor::find($selectedAdId) : null;
         $selectedAdUserId = optional($selectedAd)->user_id;
-        $dealerArea = optional(auth()->user()->dealer)->area;
+        $dealerArea = $this->salesTerritoryFor(auth()->user());
         $dealerUserIdsInArea = collect();
         
         if ($dealerArea && Schema::hasTable('dealers')) {
@@ -468,6 +459,45 @@ class ProductController extends Controller
         }
 
         return [$dealerStockByProduct, $adStockByProduct];
+    }
+
+    /**
+     * Return the sales territory for product visibility. Center Chiefs use
+     * their own profile rather than the legacy dealer compatibility profile.
+     */
+    private function salesTerritoryFor($user)
+    {
+        if (!$user) {
+            return '';
+        }
+
+        if ($user->usesSrpPricing()) {
+            return trim((string) optional($user->centerChief)->area);
+        }
+
+        return trim((string) optional($user->dealer)->area);
+    }
+
+    /**
+     * Limit products to the Area Distributor territory assigned to the user.
+     * A Center Chief without a configured territory must not see all products.
+     */
+    private function applySalesTerritoryFilter($query, $user)
+    {
+        $territory = $this->salesTerritoryFor($user);
+
+        if ($territory === '') {
+            if ($user && $user->usesSrpPricing()) {
+                $query->whereRaw('1 = 0');
+            }
+
+            return $query;
+        }
+
+        return $query->whereHas('adProduct.areas', function ($areaQuery) use ($territory) {
+            $areaQuery->whereRaw('LOWER(TRIM(area_name)) = ?', [strtolower($territory)])
+                ->whereNull('deleted_at');
+        });
     }
 
     private function normalizeAreaName($area)

@@ -80,6 +80,12 @@ class LoginController extends Controller
             return true;
         }
 
+        // Mega Dealers use the Dealer sign-in option and dealer workspace,
+        // while their stored role remains mega_dealer for pricing and access.
+        if ($selectedRole === 'dealer' && $userRole === 'megadealer') {
+            return true;
+        }
+
         return $selectedRole === $userRole;
     }
 
