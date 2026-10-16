@@ -115,7 +115,7 @@
                             <span>View Transactions</span>
                             <i class="bi bi-arrow-right-short"></i>
                         </a>
-                        @if(auth()->user()->role === 'Dealer')
+                        @if(auth()->user()->isDealerLike())
                             @if($stockRequest && $stockRequest->status === 'Rejected')
                                 <div class="rejection-remarks" role="status">
                                     <div class="rejection-remarks-icon"><i class="bi bi-x-circle-fill"></i></div>
@@ -157,7 +157,7 @@
     </div>
 </div>
 
-@if(auth()->user()->role === 'Dealer')
+@if(auth()->user()->isDealerLike())
 <div class="request-modal" id="stockRequestModal" aria-hidden="true">
     <div class="request-modal-card" role="dialog" aria-modal="true" aria-labelledby="requestTitle">
         <button type="button" class="modal-close" id="closeRequestModal" aria-label="Close"><i class="bi bi-x-lg"></i></button>

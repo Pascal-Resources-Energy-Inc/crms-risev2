@@ -17,6 +17,14 @@ use Illuminate\Support\Facades\Schema;
 use RealRashid\SweetAlert\Facades\Alert;
 class TransactionController extends Controller
 {
+    /**
+     * Transaction pricing and territory access always require a signed-in user.
+     */
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
     // public function index(Request $request)
     // {
     //     $customers = Client::whereHas('serial')->get();
@@ -45,7 +53,18 @@ class TransactionController extends Controller
     {
         $user = auth()->user();
 
-        $customers = Client::whereHas('serial')->get();
+        $customersQuery = Client::whereHas('serial');
+
+        if ($user->usesSrpPricing()) {
+            $chiefMfi = trim((string) optional($user->centerChief)->mfi);
+            $customersQuery->when($chiefMfi !== '', function ($query) use ($chiefMfi) {
+                $query->whereRaw('LOWER(TRIM(mfi)) = ?', [strtolower($chiefMfi)]);
+            }, function ($query) {
+                $query->whereRaw('1 = 0');
+            });
+        }
+
+        $customers = $customersQuery->get();
         $items = Item::get();
         $dealers = Dealer::get();
         $transactions = [];
@@ -54,23 +73,29 @@ class TransactionController extends Controller
 
         if ($user->role == "Admin") {
             $transactions = TransactionDetail::get();
-        } elseif ($user->role == "Dealer") {
+        } elseif ($user->isDealerLike()) {
             $transactions = TransactionDetail::where('dealer_id', $user->id)->get();
         }
 
-        $center = optional($user->dealer)->area;
+        $center = $user->usesSrpPricing()
+            ? trim((string) optional($user->centerChief)->area)
+            : trim((string) optional($user->dealer)->area);
 
         // ✅ GET ALL MATCHING ADs (NOT just first)
         $matchedADs = collect();
 
-        if ($center) {
+        if ($center !== '') {
             $matchedADs = AreaDistributor::whereHas('areas', function ($q) use ($center) {
-                $q->where('area_name', $center);
+                $q->whereRaw('LOWER(TRIM(area_name)) = ?', [strtolower($center)])
+                    ->whereNull('deleted_at');
             })->get();
         }
 
-        // ✅ If no match → fallback to ALL
-        $availableADs = $matchedADs->isNotEmpty() ? $matchedADs : $areaDistributor;
+        // Center Chiefs can order only from distributors assigned to their
+        // sales territory. Keep the legacy dealer fallback unchanged.
+        $availableADs = $user->usesSrpPricing()
+            ? $matchedADs
+            : ($matchedADs->isNotEmpty() ? $matchedADs : $areaDistributor);
 
         return view('place_order', [
             'transactions' => $transactions,
@@ -87,6 +112,7 @@ class TransactionController extends Controller
     public function store(Request $request)
     {
         try {
+            $user = auth()->user();
             $validated = $request->validate([
                 // 'item_id' => 'required|exists:items,id',
                 'item_id' => 'required|exists:dms.products,id',
@@ -109,6 +135,16 @@ class TransactionController extends Controller
             $client = $isGuestTransaction
                 ? null
                 : Client::with('user')->findOrFail($request->customer_id);
+
+            if (!$isGuestTransaction && $user->usesSrpPricing()) {
+                $chiefMfi = trim((string) optional($user->centerChief)->mfi);
+
+                if ($chiefMfi === '' || strtolower(trim((string) $client->mfi)) !== strtolower($chiefMfi)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'customer_id' => ['The selected customer is not assigned to your MFI.'],
+                    ]);
+                }
+            }
             $dealerStock = $this->getDealerProductStock($item, auth()->id());
             $transactionStatus = $dealerStock >= (int) $request->qty ? 'Completed' : 'Pending';
 
@@ -122,8 +158,11 @@ class TransactionController extends Controller
             $transaction->points_client = $isGuestTransaction ? 0 : $item->customer_points * $request->qty;
             $transaction->item_description = $item->description;
             $transaction->qty = $request->qty;
-            // Client transactions always use the product's regular price.
-            $transaction->price = $item->price ?? 0;
+            // Client transactions always use the regular product price.
+            // This is assigned on the server rather than trusting the cart.
+            $transaction->price = $user->usesSrpPricing()
+                ? ($item->srp_price ?? $item->price ?? 0)
+                : ($item->price ?? 0);
             $transaction->client_id = $isGuestTransaction ? null : $request->customer_id;
             $transaction->client_address = $isGuestTransaction ? '' : ($client->address ?? '');
             if (Schema::hasColumn('transaction_details', 'is_guest')) {
@@ -201,6 +240,20 @@ class TransactionController extends Controller
 
             $dealer = auth()->user();
 
+            if ($dealer->usesSrpPricing()) {
+                $territory = trim((string) optional($dealer->centerChief)->area);
+                $isAssignedDistributor = $territory !== '' && $ad->areas()
+                    ->whereRaw('LOWER(TRIM(area_name)) = ?', [strtolower($territory)])
+                    ->whereNull('deleted_at')
+                    ->exists();
+
+                if (!$isAssignedDistributor) {
+                    throw \Illuminate\Validation\ValidationException::withMessages([
+                        'area_distributor_id' => ['The selected Area Distributor is outside your assigned sales territory.'],
+                    ]);
+                }
+            }
+
             $last = OrderDetail::latest('id')->first();
             $nextNumber = $last ? $last->id + 1 : 1;
             $transactionCode = 'PRORD-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
@@ -216,8 +269,12 @@ class TransactionController extends Controller
             // $transaction->points_client = $item->customer_points * $request->qty;
             $transaction->item_description = $item->description;
             $transaction->qty = $request->qty;
-            // Orders to an Area Distributor always use dealer pricing.
-            $transaction->price = $item->dealer_price ?? $item->price ?? 0;
+            // Role-specific pricing is enforced for Area Distributor orders.
+            $transaction->price = $dealer->usesSrpPricing()
+                ? ($item->srp_price ?? $item->price ?? 0)
+                : ($dealer->usesMegaDealerPricing()
+                    ? ($item->mega_dealer_price ?? $item->dealer_price ?? $item->price ?? 0)
+                    : ($item->dealer_price ?? $item->price ?? 0));
 
             $transaction->ad_id = $request->area_distributor_id;
             // $transaction->ad_id = $ad->user_id; // ✅ SAVE USER ID (NOT AD ID)
@@ -450,7 +507,7 @@ class TransactionController extends Controller
 
             $transaction = TransactionDetail::findOrFail($id);
 
-            if (auth()->user()->role === "Dealer" && $transaction->dealer_id != auth()->user()->id) {
+            if (auth()->user()->isDealerLike() && $transaction->dealer_id != auth()->user()->id) {
                 return response()->json(['error' => 'Unauthorized to delete this transaction'], 403);
             }
 
@@ -490,7 +547,7 @@ class TransactionController extends Controller
 
             $query = TransactionDetail::whereIn('id', $validIds);
 
-            if (auth()->user()->role === "Dealer") {
+            if (auth()->user()->isDealerLike()) {
                 $query->where('dealer_id', auth()->user()->id);
             }
 
@@ -549,6 +606,8 @@ class TransactionController extends Controller
         $role = strtolower(str_replace([' ', '-'], '_', optional($user ?: auth()->user())->role ?? 'client'));
         $priceColumn = [
             'dealer' => 'dealer_price',
+            'center_chief' => 'srp_price',
+            'centerchief' => 'srp_price',
             'mega_dealer' => 'mega_dealer_price',
         ][$role] ?? 'price';
 

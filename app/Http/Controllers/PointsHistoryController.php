@@ -10,12 +10,20 @@ use Carbon\Carbon;
 
 class PointsHistoryController extends Controller
 {
+    /**
+     * Point history is only available for an authenticated account.
+     */
+    public function __construct()
+    {
+        $this->middleware('auth');
+    }
+
     public function index()
     {
         $user = Auth::user();
         
         // Get transactions based on user role
-        if ($user->role === 'Dealer') {
+        if ($user->isDealerLike()) {
             // For dealers, show transactions they created
             $earnedPoints = TransactionDetail::where('dealer_id', $user->id)
                 ->orderBy('created_at', 'desc')

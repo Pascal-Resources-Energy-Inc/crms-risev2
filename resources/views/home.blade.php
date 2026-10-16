@@ -391,7 +391,7 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 
 <div class="main-content-wrapper">
-    @if(auth()->user()->role == "Dealer")
+    @if(auth()->user()->isDealerLike())
         <section class="welcome welcome-dealer">
             <div class="row">    
                 <div class="col-lg-10 col-xl-12 text-left mb-4">
@@ -399,10 +399,22 @@
                         <div class="card-body position-relative">
                             <div class='row'>
                                 <div class="col-lg-12 col-xl-12" style="font-size: 12px; height: 80px;">
+                                    @if(auth()->user()->usesSrpPricing() && $center_chief)
+                                    Chief Reference: {{ $center_chief->chief_reference }}<br>
+                                    Name: {{ $center_chief->name }} <br>
+                                    Contact No.: {{ $center_chief->number ?? 'Not set' }} <br>
+                                    MFI: {{ $center_chief->mfi }} <br>
+                                    @elseif($dealer)
                                     Dealer ID: {{date('Y',strtotime($dealer->created_at))}}-{{$dealer->id}}<br>
                                     Name: {{$dealer->name}} <br>
                                     Contact No.: {{$dealer->number}} <br>
                                     Registered: {{date('M d,Y',strtotime($dealer->created_at))}} <br>
+                                    @else
+                                    Dealer ID: {{ auth()->id() }}<br>
+                                    Name: {{ auth()->user()->name }} <br>
+                                    Contact No.: Not set <br>
+                                    Registered: {{ optional(auth()->user()->created_at)->format('M d, Y') ?? 'Not set' }} <br>
+                                    @endif
                                 </div>
                             </div>
                             <div class="school-img d-sm-block">

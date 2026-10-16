@@ -29,9 +29,7 @@ Route::post('/ad-orders/{id}/cancel', ['uses' => 'HomeController@cancelPendingOr
 Route::get('/points-history', 'PointsHistoryController@index')->name('points.history');
 
 
-Route::get('/chat', function () {
-    return view('chat');
-})->name('chat');
+Route::view('/chat', 'chat')->name('chat');
 
 Auth::routes();
 
@@ -44,7 +42,7 @@ Route::patch('account','AccountController@update')->name('account.update');
 Route::get('/storelocation', 'HomeController@storelocation')->name('storelocation');
 Route::get('/api/locations-map', 'HomeController@getLocationsForMap')->name('locations.map');
 Route::get('/api/location-details/{id}/{type}', 'HomeController@getLocationDetails')->name('location.details');
-Route::get('/home/monthly-data', 'HomeController@getMonthlyDataAjax')->name('home.monthly-data');
+Route::get('/home/monthly-data', 'HomeController@getChartDataAjax')->name('home.monthly-data');
 Route::get('/home/chart-data', 'HomeController@getChartDataAjax')->name('home.chart-data');
 
 Route::get('/products', 'ProductController@index')->name('products.index');
@@ -79,7 +77,7 @@ Route::post('/store-transaction-admin','TransactionController@storeAdmin')->name
 Route::get('/redeem', 'RedeemedHistoryController@index')->middleware('auth')->name('redeem');
 Route::post('/redeem-reward', 'RedeemedHistoryController@redeemReward')->middleware('auth')->name('redeem.reward');
 
-Route::get('/redemption-success', function () { return view('redemption-success'); });
+Route::view('/redemption-success', 'redemption-success')->name('redemption.success');
 
 // Voucher Routes
 Route::get('/voucher', 'VoucherController@index')->name('voucher');

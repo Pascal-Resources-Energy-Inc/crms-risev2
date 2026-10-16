@@ -111,19 +111,19 @@ class CartController extends Controller
     {
         $user = auth()->user();
         $dealer = $user->dealer;
-
-        $dealerLat = optional($dealer)->latitude;
-        $dealerLng = optional($dealer)->longitude;
+        [$originLat, $originLng] = $this->distanceOriginFor($user, $dealer);
 
         // Include every client in the dealer's MFI; a stove/serial record is
         // not required to appear in the customer selector.
         $customersQuery = Client::query();
 
-        if ($user->role === 'Dealer') {
-            $dealerMfi = trim((string) optional($dealer)->mfi);
+        if ($user->isDealerLike()) {
+            $dealerMfi = $user->usesSrpPricing()
+                ? trim((string) optional($user->centerChief)->mfi)
+                : trim((string) optional($dealer)->mfi);
 
-            // Never expose customers outside the authenticated dealer's MFI.
-            // A dealer without an assigned MFI gets an empty customer list.
+            // Center Chief customer access is based on center_chiefs.mfi.
+            // A missing MFI intentionally produces an empty customer list.
             if ($dealerMfi === '') {
                 $customersQuery->whereRaw('1 = 0');
             } else {
@@ -147,19 +147,22 @@ class CartController extends Controller
         // dd($areaDistributor);
         if ($user->role == "Admin") {
             $transactions = TransactionDetail::get();
-        } elseif ($user->role == "Dealer") {
+        } elseif ($user->isDealerLike()) {
             $transactions = TransactionDetail::where('dealer_id', $user->id)->get();
         }
 
-        $center = optional($dealer)->area;
+        $center = $user->usesSrpPricing()
+            ? trim((string) optional($user->centerChief)->area)
+            : trim((string) optional($dealer)->area);
         
         // ✅ STEP 1: compute ALL ADs with distance
-        $adsWithDistance = $areaDistributor->map(function ($ad) use ($dealerLat, $dealerLng) {
+        $adsWithDistance = $areaDistributor->map(function ($ad) use ($originLat, $originLng) {
 
-            if ($ad->latitude && $ad->longitude && $dealerLat && $dealerLng) {
+            if (is_numeric($ad->latitude) && is_numeric($ad->longitude) &&
+                is_numeric($originLat) && is_numeric($originLng)) {
                 $ad->distance = $this->calculateDistance(
-                    $dealerLat,
-                    $dealerLng,
+                    $originLat,
+                    $originLng,
                     $ad->latitude,
                     $ad->longitude
                 );
@@ -172,9 +175,11 @@ class CartController extends Controller
 
         // Keep every AD assigned to the dealer's area. Coordinates are optional;
         // when present, they only determine the display order.
-        $matchedADs = $center
+        $matchedADs = $center !== ''
             ? $adsWithDistance->filter(function ($ad) use ($center) {
-                return $ad->areas->contains('area_name', $center);
+                return $ad->areas->contains(function ($area) use ($center) {
+                    return strtolower(trim((string) $area->area_name)) === strtolower($center);
+                });
             })->values()
             : collect();
 
@@ -182,10 +187,11 @@ class CartController extends Controller
             ->sortBy(fn ($ad) => $ad->distance === null ? PHP_FLOAT_MAX : $ad->distance)
             ->values();
 
-        // If no AD is assigned to the dealer's area, let the dealer choose from all ADs.
-        $availableADs = $matchedADs->isNotEmpty()
+        // A Center Chief must remain within the territory defined on their
+        // center_chiefs profile. Dealers retain their current fallback.
+        $availableADs = $user->usesSrpPricing()
             ? $matchedADs
-            : $areaDistributor;
+            : ($matchedADs->isNotEmpty() ? $matchedADs : $areaDistributor);
 
         return view('cart', [
             'transactions' => $transactions,
@@ -199,9 +205,95 @@ class CartController extends Controller
         ]);
     }
 
+    /**
+     * Center Chief distances must originate from the Center Chief profile,
+     * not the legacy dealer compatibility record.
+     */
+    private function distanceOriginFor($user, $dealer)
+    {
+        if ($user->usesSrpPricing()) {
+            return $this->centerChiefCoordinates($user->centerChief);
+        }
+
+        return [optional($dealer)->latitude, optional($dealer)->longitude];
+    }
+
+    /**
+     * Resolve a Center Chief's structured profile address once, then retain
+     * its coordinates for later distance calculations.
+     */
+    private function centerChiefCoordinates($centerChief)
+    {
+        if (!$centerChief) {
+            return [null, null];
+        }
+
+        if (is_numeric($centerChief->latitude) && is_numeric($centerChief->longitude)) {
+            return [(float) $centerChief->latitude, (float) $centerChief->longitude];
+        }
+
+        $address = collect([
+            $centerChief->street_address,
+            $centerChief->location_barangay,
+            $centerChief->location_city,
+            $centerChief->location_province,
+            $centerChief->location_region,
+            'Philippines',
+        ])->filter()->implode(', ');
+
+        $coordinates = $this->geocodeAddress($address);
+
+        if ($coordinates === null) {
+            return [null, null];
+        }
+
+        [$latitude, $longitude] = $coordinates;
+        $centerChief->latitude = $latitude;
+        $centerChief->longitude = $longitude;
+        $centerChief->save();
+
+        return $coordinates;
+    }
+
+    /**
+     * Use OpenStreetMap's geocoder only when profile coordinates have not
+     * yet been stored. The result is cached on the Center Chief profile.
+     */
+    private function geocodeAddress($address)
+    {
+        if (trim($address) === '') {
+            return null;
+        }
+
+        $url = 'https://nominatim.openstreetmap.org/search?' . http_build_query([
+            'q' => $address,
+            'format' => 'jsonv2',
+            'limit' => 1,
+            'countrycodes' => 'ph',
+        ]);
+
+        $context = stream_context_create([
+            'http' => [
+                'method' => 'GET',
+                'timeout' => 5,
+                'header' => "User-Agent: CRMS-RISE/1.0\r\nAccept: application/json\r\n",
+            ],
+        ]);
+        $response = @file_get_contents($url, false, $context);
+        $results = $response === false ? null : json_decode($response, true);
+
+        if (!is_array($results) || empty($results[0]) ||
+            !isset($results[0]['lat'], $results[0]['lon']) ||
+            !is_numeric($results[0]['lat']) || !is_numeric($results[0]['lon'])) {
+            return null;
+        }
+
+        return [(float) $results[0]['lat'], (float) $results[0]['lon']];
+    }
+
     private function calculateDistance($lat1, $lon1, $lat2, $lon2)
     {
-        if (!$lat1 || !$lon1 || !$lat2 || !$lon2) {
+        if (!is_numeric($lat1) || !is_numeric($lon1) || !is_numeric($lat2) || !is_numeric($lon2)) {
             return null;
         }
 

@@ -14,7 +14,19 @@ class ClientController extends Controller
     public function getClients()
     {
         try {
-            $clients = DB::select('SELECT * FROM clients');
+            $query = Client::query();
+
+            if (auth()->check() && auth()->user()->usesSrpPricing()) {
+                $chiefMfi = trim((string) optional(auth()->user()->centerChief)->mfi);
+
+                if ($chiefMfi === '') {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    $query->whereRaw('LOWER(TRIM(mfi)) = ?', [strtolower($chiefMfi)]);
+                }
+            }
+
+            $clients = $query->get()->all();
             
             $clientsArray = array_map(function($client) {
                 $clientData = (array) $client;

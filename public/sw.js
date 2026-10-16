@@ -1,6 +1,6 @@
 const CACHE_VERSION = 'v1';
 const CACHE_NAME = `gazlite-pwa-${CACHE_VERSION}`;
-const BASE_PATH = self.registration.scope.includes('/crms/public') ? '/crms/public' : '';
+const BASE_PATH = self.registration.scope.includes('/crms-risev2/public') ? '/crms-risev2/public' : '';
 
 const OFFLINE_URLS = [
   `${BASE_PATH}/pwa-launcher.html`,

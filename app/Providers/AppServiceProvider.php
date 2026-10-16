@@ -5,6 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\Facades\Auth;
 use App\Dealer;
+use App\CenterChief;
 use App\Client;
 use App\Item;
 use App\RedeemedHistory;
@@ -38,7 +39,21 @@ class AppServiceProvider extends ServiceProvider
             if (Auth::check()) {
                 $user = Auth::user();
 
-                if ($user->role == 'Dealer') {
+                if ($user->usesSrpPricing()) {
+                    // Center Chief identity and profile details are owned by
+                    // center_chiefs; the Dealer record is only a workspace
+                    // compatibility link.
+                    $profile = CenterChief::where('user_id', $user->id)->first();
+
+                    $unreadNotifications = RedeemedHistory::where('user_id', $user->id)
+                        ->where('viewed', 0)
+                        ->count();
+
+                    $totalPoints = \App\TransactionDetail::where('dealer_id', $user->id)->sum('points_dealer');
+                    $redeemedPoints = abs(RedeemedHistory::where('user_id', $user->id)->sum('points_amount'));
+                    $availablePoints = $totalPoints - $redeemedPoints;
+                    $dealer_available_points = $availablePoints;
+                } elseif ($user->isDealerLike()) {
                     $profile = Dealer::where('user_id', $user->id)->first();
                     
                     $unreadNotifications = RedeemedHistory::where('user_id', $user->id)

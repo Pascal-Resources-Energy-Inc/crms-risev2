@@ -1030,9 +1030,15 @@
           console.log('Transaction Type:', isADOrder ? 'AD ORDER' : 'CLIENT ORDER');
 
           // ✅ Choose correct route
-          const storeUrl = isADOrder
+          const storeRoute = isADOrder
               ? "{{ route('ad.transactions.store') }}"
               : "{{ route('transactions.store') }}";
+
+          // Keep the request on the host that served this page. This prevents
+          // a localhost/127.0.0.1 mismatch from dropping the session cookie
+          // and causing Laravel to reject the request with HTTP 419.
+          const routeUrl = new URL(storeRoute, window.location.origin);
+          const storeUrl = routeUrl.pathname + routeUrl.search;
 
           // ✅ CSRF Token
           let csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
@@ -1056,6 +1062,7 @@
                   console.log(`Saving item ${i + 1}/${dealerCartData.length}:`, item);
 
                   const formData = new FormData();
+                  formData.append('_token', csrfToken);
                   formData.append('item_id', item.id);
                   formData.append('qty', item.quantity);
 
@@ -1090,6 +1097,10 @@
                   });
 
                   const responseText = await response.text();
+
+                  if (response.status === 419) {
+                      throw new Error('Your session has expired. Please refresh the page and sign in again.');
+                  }
 
                   let responseData;
                   try {

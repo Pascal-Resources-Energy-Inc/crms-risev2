@@ -49,7 +49,7 @@ $showRoleSelection = $isDirect && !$showLoginDirectly;
         <div class="role-wrapper">
             <div class="welcome-section">
                 <h1 class="welcome-title">Welcome to Gaz Lite !</h1>
-                <p class="welcome-subtitle">Select 'Dealer' or 'Client' to get started.</p>
+                <p class="welcome-subtitle">Select your account type to get started.</p>
             </div>
 
             <div class="context-image-section">
@@ -63,7 +63,7 @@ $showRoleSelection = $isDirect && !$showLoginDirectly;
             </div>
 
             <div class="role-buttons">
-                <button class="role-button dealer-btn" onclick="selectRole('dealer')">
+                <button type="button" class="role-button dealer-btn" data-role="dealer" onclick="selectRole('dealer')">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="role-icon">
                         <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -71,8 +71,16 @@ $showRoleSelection = $isDirect && !$showLoginDirectly;
                     Dealer
                     <span class="selected-indicator" style="display: none;">✓</span>
                 </button>
+                <button type="button" class="role-button center-chief-btn" data-role="center chief" onclick="selectRole('center chief')">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="role-icon">
+                        <path d="M12 3L19 6V11C19 15.5 16.1 19.6 12 21C7.9 19.6 5 15.5 5 11V6L12 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Center Chief
+                    <span class="selected-indicator" style="display: none;">✓</span>
+                </button>
                 
-                <button class="role-button client-btn" onclick="selectRole('client')">
+                <button type="button" class="role-button client-btn" data-role="client" onclick="selectRole('client')">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="role-icon">
                         <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -105,7 +113,7 @@ $showRoleSelection = $isDirect && !$showLoginDirectly;
             <div class="role-indicator" id="roleIndicator" style="display: {{ $showLoginDirectly ? 'block' : 'none' }};">
                 <div class="role-info">
                     <span class="role-label">Signing in as:</span>
-                    <span class="role-name" id="selectedRoleName">{{ $hasSelectedRole ? ucfirst(old('selected_role')) : 'User' }}</span>
+                    <span class="role-name" id="selectedRoleName">{{ $hasSelectedRole ? ucwords(old('selected_role')) : 'User' }}</span>
                 </div>
             </div>
 
@@ -809,7 +817,11 @@ function selectRole(role) {
     clearRoleSelection();
     clearAllErrors();
     
-    const selectedButton = document.querySelector(`.${role}-btn`);
+    const selectedButton = document.querySelector(`.role-button[data-role="${role}"]`);
+    if (!selectedButton) {
+        console.error('Selected login role button was not found:', role);
+        return;
+    }
     const checkmark = selectedButton.querySelector('.selected-indicator');
     
     selectedButton.classList.add('selected');
@@ -859,7 +871,7 @@ function updateLoginFormRole() {
     
     if (currentRole) {
         roleIndicator.style.display = 'block';
-        roleName.textContent = currentRole.charAt(0).toUpperCase() + currentRole.slice(1);
+        roleName.textContent = currentRole.replace(/\b\w/g, char => char.toUpperCase());
         signinButton.textContent = `Sign in`;
         
         selectedRoleInput.value = currentRole;

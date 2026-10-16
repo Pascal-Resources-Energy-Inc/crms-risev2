@@ -196,7 +196,7 @@
             cursor: pointer;
             transition: all 0.2s ease;
             min-width: 160px;
-            
+            text-decoration: none;
         }
 
         .points-btn:hover {
@@ -1249,8 +1249,8 @@
     function redirectToOfflineMode() {
         const getBasePath = () => {
             const path = window.location.pathname;
-            if (path.includes('/crms/public')) {
-                return '/crms/public';
+            if (path.includes('/crms-risev2/public')) {
+                return '/crms-risev2/public';
             }
             return '';
         };
@@ -1338,14 +1338,14 @@
                 @endif
             </button>
 
-            {{-- <div class="dropdown points-dropdown">
-                <button class="points-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" onclick="window.location.href='{{url('rewards')}}'">
+            <div class="points-dropdown">
+                <a class="points-btn" href="{{ url('rewards') }}" aria-label="View rewards and available points">
                     <div class="points-icon-wrapper">
-                        <img src="{{url('images/icon.png')}}" alt="Profile" class="profile-img">
+                        <img src="{{ url('images/icon.png') }}" alt="Points" class="profile-img">
                     </div>
-                    <span class="points-text">{{ $availablePoints ?? 0 }} points</span>
-                </button>
-            </div> --}}
+                    <span class="points-text">{{ number_format(max(0, (int) ($availablePoints ?? 0))) }} points</span>
+                </a>
+            </div>
         </div>
     </header>
     @endif
@@ -1354,7 +1354,7 @@
     @yield('content')
 
     @if (!request()->is(['account', 'history', 'cart', 'place_order', 'rewards', 'redeem', 'voucher', 'chat', 'notification', 'settlement', 'points-history', 'notifications/*']))
-    @if(auth()->user()->role == "Dealer")
+    @if(auth()->user()->isDealerLike())
     <a href="{{ url('cart') }}" class="floating-cart-btn" id="floatingCartBtn">
         <i class="bi bi-cart cart-icon"></i>
         <div class="" id="floatingCartBadge">0</div>
@@ -1378,7 +1378,7 @@
         </a>
         @endif
 
-        @if(auth()->user()->role == "Dealer")
+        @if(auth()->user()->isDealerLike())
         <a href="{{url('/products')}}" class="nav-item {{ request()->is('products') ? 'active' : '' }}">
             <i class="bi bi-bag"></i>
             <span class="under">Products</span>

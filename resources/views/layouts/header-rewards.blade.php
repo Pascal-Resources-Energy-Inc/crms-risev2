@@ -1046,7 +1046,7 @@
                     </a>
                 </div>
                 
-                @if((auth()->user()->role == "Admin") || (auth()->user()->role == "Dealer"))
+                @if((auth()->user()->role == "Admin") || auth()->user()->isDealerLike())
                 <div class="nav-item">
                     <a href="{{url('/transactions')}}" class="nav-link @if(Route::currentRouteName() == 'transactions')active @endif">
                         <div class="nav-icon">

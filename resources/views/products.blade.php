@@ -104,7 +104,12 @@
       @php
         $dealerStock = (int) ($dealerStockByProduct[$product->id] ?? 0);
         $dealerPrice = $product->dealer_price ?? 0;
-        $regularPrice = $product->price ?? 0;
+        $srpPrice = $product->srp_price ?? $product->price ?? 0;
+        $regularPrice = $product->price ?? $srpPrice;
+        $megaDealerPrice = $product->mega_dealer_price ?? $dealerPrice ?? $regularPrice;
+        $isCenterChief = auth()->user()->usesSrpPricing();
+        $isMegaDealer = auth()->user()->usesMegaDealerPricing();
+        $displayPrice = $isCenterChief ? $srpPrice : ($isMegaDealer ? $megaDealerPrice : $dealerPrice);
         $hasProductImage = !empty($product->product_image);
         $productImageUrl = $hasProductImage
             ? config('app.crms_admin_url') . '/public/uploads/products/' . $product->product_image
@@ -148,7 +153,7 @@
                 <div class="stock-status-row">
                     <span class="stock-pill {{ $dealerStock > 0 ? 'stock-pill-available' : 'stock-pill-empty' }}">
                         <i class="bi bi-shop"></i>
-                        <span>Dealer</span>
+                        <span>{{ $isCenterChief ? 'Center Chief' : 'Dealer' }}</span>
                         <strong>{{ $dealerStock > 0 ? $dealerStock : 0 }}</strong>
                     </span>
                 </div>
@@ -156,6 +161,21 @@
                 <div class="price-add-container">
 
                     <div class="price-details" aria-label="Product prices">
+                        @if($isCenterChief)
+                        <div class="price-block regular-price-block">
+                            <span class="price-label"><i class="bi bi-tag-fill"></i> SRP</span>
+                            <div class="product-price">&#8369; {{ number_format($srpPrice, 2) }}</div>
+                        </div>
+                        @elseif($isMegaDealer)
+                        <div class="price-block dealer-price-block">
+                            <span class="price-label"><i class="bi bi-tag-fill"></i> Mega Dealer Price</span>
+                            <div class="product-price">&#8369; {{ number_format($megaDealerPrice, 2) }}</div>
+                        </div>
+                        <div class="price-block regular-price-block">
+                            <span class="price-label">Price</span>
+                            <div class="regular-price">&#8369; {{ number_format($regularPrice, 2) }}</div>
+                        </div>
+                        @else
                         <div class="price-block dealer-price-block">
                             <span class="price-label"><i class="bi bi-tag-fill"></i> Dealer Price</span>
                             <div class="product-price">&#8369; {{ number_format($dealerPrice, 2) }}</div>
@@ -164,6 +184,7 @@
                             <span class="price-label">Price</span>
                             <div class="regular-price">&#8369; {{ number_format($regularPrice, 2) }}</div>
                         </div>
+                        @endif
                     </div>
 
                     <div class="add-to-cart">
@@ -172,9 +193,11 @@
                             class="add-btn btn btn-primary rounded-circle p-0 d-flex justify-content-center align-items-center"
                             data-id="{{ $product->id }}"
                             data-container="container-{{ $product->id }}"
-                            data-price="{{ $dealerPrice }}"
+                            data-price="{{ $displayPrice }}"
                             data-dealer-price="{{ $dealerPrice }}"
                             data-regular-price="{{ $regularPrice }}"
+                            data-srp-price="{{ $srpPrice }}"
+                            data-mega-dealer-price="{{ $megaDealerPrice }}"
                             data-name="{{ $product->product_name }}"
                             data-image="{{ $productImageUrl ?? asset('images/product-placeholder.svg') }}"
                             data-dealer-stock="{{ $dealerStock }}"
@@ -1970,6 +1993,8 @@
       price: parseFloat(button.getAttribute('data-price')),
       dealerPrice: parseFloat(button.getAttribute('data-dealer-price')),
       regularPrice: parseFloat(button.getAttribute('data-regular-price')),
+      srpPrice: parseFloat(button.getAttribute('data-srp-price')),
+      megaDealerPrice: parseFloat(button.getAttribute('data-mega-dealer-price')),
       image: button.getAttribute('data-image'),
       containerId: button.getAttribute('data-container') || button.closest('[id^="container-"]')?.id,
       dealerStock: dealerStock
@@ -2061,6 +2086,7 @@
       cart.products[existingProductIndex].quantity = newQuantity;
       cart.products[existingProductIndex].dealerPrice = productData.dealerPrice;
       cart.products[existingProductIndex].regularPrice = productData.regularPrice;
+      cart.products[existingProductIndex].megaDealerPrice = productData.megaDealerPrice;
     } else {
       cart.products.push({
         id: productData.id,
@@ -2069,6 +2095,7 @@
         price: productData.price,
         dealerPrice: productData.dealerPrice,
         regularPrice: productData.regularPrice,
+        megaDealerPrice: productData.megaDealerPrice,
         quantity: newQuantity,
         image: productData.image,
         dealerStock: productData.dealerStock,

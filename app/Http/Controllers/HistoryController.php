@@ -10,7 +10,7 @@ use Illuminate\Http\Request;
 class HistoryController extends Controller
 {
     public function index(){
-        if(auth()->user()->role == "Dealer")
+        if(auth()->user()->isDealerLike())
         {
              $profile = Dealer::where('user_id',auth()->user()->id)->first();
              $transactions = TransactionDetail::where('dealer_id',$profile->user_id)->get();

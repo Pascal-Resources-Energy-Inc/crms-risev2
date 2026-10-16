@@ -73,14 +73,25 @@ class LoginController extends Controller
 
     protected function validateSelectedRole($request, $user)
     {
-        $selectedRole = strtolower(trim($request->selected_role));
-        $userRole = strtolower(trim($user->role));
+        $selectedRole = $this->normalizeRole($request->selected_role);
+        $userRole = $this->normalizeRole($user->role);
 
         if (!$selectedRole) {
             return true;
         }
 
+        // Mega Dealers use the Dealer sign-in option and dealer workspace,
+        // while their stored role remains mega_dealer for pricing and access.
+        if ($selectedRole === 'dealer' && $userRole === 'megadealer') {
+            return true;
+        }
+
         return $selectedRole === $userRole;
+    }
+
+    protected function normalizeRole($role)
+    {
+        return strtolower(preg_replace('/[\s_-]+/', '', trim((string) $role)));
     }
 
     protected function isUserInactive($user)

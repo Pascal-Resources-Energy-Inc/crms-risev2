@@ -126,7 +126,7 @@
     },
 
     performRedirect: function() {
-      const basePath = window.location.pathname.includes('/crms/public') ? '/crms/public' : '';
+      const basePath = window.location.pathname.includes('/crms-risev2/public') ? '/crms-risev2/public' : '';
       const currentUserId = localStorage.getItem('current_user_id');
       const offlineUser = localStorage.getItem('offlineUser');
 
