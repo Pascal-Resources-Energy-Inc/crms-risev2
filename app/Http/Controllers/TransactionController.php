@@ -616,7 +616,9 @@ class TransactionController extends Controller
 
     private function getDealerProductStock(Product $product, $dealerId)
     {
-        $productNames = collect([$product->product_name, $product->description])
+        // Product descriptions are not unique, so stock is matched by the
+        // actual product name, SKU, or product ID only.
+        $productNames = collect([$product->product_name])
             ->filter()
             ->unique()
             ->values()
@@ -646,8 +648,7 @@ class TransactionController extends Controller
         if (Schema::hasTable('transaction_details')) {
             $soldQty = TransactionDetail::where('dealer_id', $dealerId)
                 ->where(function ($query) use ($product, $productNames, $productSkus) {
-                    $query->whereIn('item', $productNames)
-                        ->orWhereIn('item_description', $productNames);
+                    $query->whereIn('item', $productNames);
 
                     if (Schema::hasColumn('transaction_details', 'product_id')) {
                         $query->orWhere('product_id', $product->id);

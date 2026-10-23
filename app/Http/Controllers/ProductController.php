@@ -190,7 +190,9 @@ class ProductController extends Controller
             Product::with(['adProduct.areas']),
             $user
         )->findOrFail($id);
-        $productNames = collect([$product->product_name, $product->description])
+        // Descriptions are shared by several products (for example, deposits),
+        // so they must never be used as a stock identity.
+        $productNames = collect([$product->product_name])
             ->filter()
             ->unique()
             ->values()
@@ -257,8 +259,7 @@ class ProductController extends Controller
             $stockOutRows = TransactionDetail::with('customer')
                 ->where('dealer_id', $user->id)
                 ->where(function ($query) use ($product, $productNames, $productSkus, $transactionDetailsHasSku, $transactionDetailsHasProductId) {
-                    $query->whereIn('item', $productNames)
-                        ->orWhereIn('item_description', $productNames);
+                    $query->whereIn('item', $productNames);
 
                     if ($transactionDetailsHasProductId) {
                         $query->orWhere('product_id', $product->id);
@@ -359,8 +360,7 @@ class ProductController extends Controller
             $transactionDetailsHasProductId = Schema::hasColumn('transaction_details', 'product_id');
 
             $dealerTransactions = TransactionDetail::where(function ($query) use ($productIds, $productNames, $productSkus, $transactionDetailsHasSku, $transactionDetailsHasProductId) {
-                    $query->whereIn('item', $productNames)
-                        ->orWhereIn('item_description', $productNames);
+                    $query->whereIn('item', $productNames);
 
                     if ($transactionDetailsHasProductId && !empty($productIds)) {
                         $query->orWhereIn('product_id', $productIds);
@@ -448,8 +448,6 @@ class ProductController extends Controller
                     ->filter(function ($transaction) use ($product) {
                         return (int) ($transaction->product_id ?? 0) === (int) $product->id ||
                             $transaction->item === $product->product_name ||
-                            $transaction->item_description === $product->product_name ||
-                            (!empty($product->description) && $transaction->item_description === $product->description) ||
                             (!empty($product->sku) && $transaction->sku === $product->sku);
                     })
                     ->sum('qty');
