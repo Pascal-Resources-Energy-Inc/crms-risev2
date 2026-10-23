@@ -8,6 +8,8 @@ use App\Item;
 use App\Client;
 use App\Dealer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class CartController extends Controller
 {
@@ -116,6 +118,7 @@ class CartController extends Controller
         // Include every client in the dealer's MFI; a stove/serial record is
         // not required to appear in the customer selector.
         $customersQuery = Client::query();
+        $dealerMfi = '';
 
         if ($user->isDealerLike()) {
             $dealerMfi = $user->usesSrpPricing()
@@ -130,6 +133,13 @@ class CartController extends Controller
                 $customersQuery->whereRaw('LOWER(TRIM(mfi)) = ?', [strtolower($dealerMfi)]);
             }
         }
+
+        // DMS controls whether a dealer's MFI may see full customer names.
+        $showCustomerFullName = $dealerMfi !== '' &&
+            Schema::connection('dms')->hasTable('mfis') &&
+            (int) DB::connection('dms')->table('mfis')
+                ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($dealerMfi)])
+                ->value('show_customer_full_name') === 1;
 
         $customers = $customersQuery->get();
         $items = Item::get();
@@ -202,6 +212,7 @@ class CartController extends Controller
             'userCenter' => $center,
             'matchedADs' => $matchedADs,
             'availableADs' => $availableADs,
+            'showCustomerFullName' => $showCustomerFullName,
         ]);
     }
 

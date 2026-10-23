@@ -43,6 +43,7 @@ class ProductController extends Controller
         // Include every client in the dealer's MFI; a stove/serial record is
         // not required to appear in the customer selector.
         $customersQuery = Client::query();
+        $dealerMfi = '';
 
         if ($user->isDealerLike()) {
             $dealerMfi = $user->usesSrpPricing()
@@ -57,6 +58,14 @@ class ProductController extends Controller
                 $customersQuery->whereRaw('LOWER(TRIM(mfi)) = ?', [strtolower($dealerMfi)]);
             }
         }
+
+        // MFI privacy settings are managed in DMS. Names remain masked unless
+        // the signed-in dealer's MFI explicitly permits the full name display.
+        $showCustomerFullName = $dealerMfi !== '' &&
+            Schema::connection('dms')->hasTable('mfis') &&
+            (int) DB::connection('dms')->table('mfis')
+                ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower($dealerMfi)])
+                ->value('show_customer_full_name') === 1;
 
         $customers = $customersQuery->get();
         $items = Item::get();
@@ -84,6 +93,7 @@ class ProductController extends Controller
             'dealerProfile' => $dealerProfile,
             'dealerStockByProduct' => $dealerStockByProduct,
             'adStockByProduct' => $adStockByProduct,
+            'showCustomerFullName' => $showCustomerFullName,
         ]);
     }
 

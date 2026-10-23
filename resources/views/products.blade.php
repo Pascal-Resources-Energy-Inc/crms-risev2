@@ -58,6 +58,7 @@
           $parts = explode(' ', $fullName);
           $lastName = array_pop($parts);
           $masked = str_repeat('*', strlen(implode(' ', $parts))) . ' ' . $lastName;
+          $displayName = ($showCustomerFullName ?? false) ? $fullName : $masked;
           
           $serial = $customer->serial->serial_number ?? '';
           $masked_serial = str_repeat('*', max(0, strlen($serial) - 5)) . substr($serial, -5);
@@ -67,13 +68,13 @@
           @endphp
           <a class="dropdown-item category-filter customer-option hidden" href="#" 
             data-customer-id="{{ $customer->id }}"
-            data-name="{{ $masked }}"
+            data-name="{{ $displayName }}"
             data-serial="{{ $masked_serial }}"
             data-number="{{ $masked_number }}"
             data-full-name="{{ $fullName }}"
-            data-search="{{ strtolower($masked . ' ' . $masked_serial . ' ' . $masked_number) }}">
+            data-search="{{ strtolower($displayName . ' ' . $masked_serial . ' ' . $masked_number) }}">
             <div class="customer-info">
-              <div class="customer-name">{{ $masked }}</div>
+              <div class="customer-name">{{ $displayName }}</div>
               <div class="customer-details">
                 <span class="customer-serial">Serial: {{ $masked_serial }}</span>
                 <span class="customer-number">Number: {{ $masked_number }}</span>
