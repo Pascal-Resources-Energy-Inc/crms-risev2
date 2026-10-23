@@ -798,7 +798,9 @@ class HomeController extends Controller
             return 0;
         }
 
-        $productNames = collect([$order->item, $order->item_description])
+        // An item description can be shared by different products. Use the
+        // ordered product name so one product cannot consume another's stock.
+        $productNames = collect([$order->item])
             ->filter()
             ->unique()
             ->values()
@@ -810,8 +812,7 @@ class HomeController extends Controller
         $pendingTransactions = TransactionDetail::where('dealer_id', $order->dealer_id)
             ->where('status', 'Pending')
             ->where(function ($query) use ($productNames, $productSkus, $hasSku) {
-                $query->whereIn('item', $productNames)
-                    ->orWhereIn('item_description', $productNames);
+                $query->whereIn('item', $productNames);
 
                 if ($hasSku && !empty($productSkus)) {
                     $query->orWhereIn('sku', $productSkus);
@@ -840,7 +841,7 @@ class HomeController extends Controller
 
     private function getAvailableDealerStockForOrderProduct(OrderDetail $order)
     {
-        $productNames = collect([$order->item, $order->item_description])
+        $productNames = collect([$order->item])
             ->filter()
             ->unique()
             ->values()
@@ -861,8 +862,7 @@ class HomeController extends Controller
         $completedSalesQty = TransactionDetail::where('dealer_id', $order->dealer_id)
             ->where('status', 'Completed')
             ->where(function ($query) use ($productNames, $productSkus) {
-                $query->whereIn('item', $productNames)
-                    ->orWhereIn('item_description', $productNames);
+                $query->whereIn('item', $productNames);
 
                 if (Schema::hasColumn('transaction_details', 'sku') && !empty($productSkus)) {
                     $query->orWhereIn('sku', $productSkus);

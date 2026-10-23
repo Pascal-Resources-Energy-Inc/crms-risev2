@@ -1338,14 +1338,14 @@
                 @endif
             </button>
 
-            <div class="points-dropdown">
+            {{-- <div class="points-dropdown">
                 <a class="points-btn" href="{{ url('rewards') }}" aria-label="View rewards and available points">
                     <div class="points-icon-wrapper">
                         <img src="{{ url('images/icon.png') }}" alt="Points" class="profile-img">
                     </div>
                     <span class="points-text">{{ number_format(max(0, (int) ($availablePoints ?? 0))) }} points</span>
                 </a>
-            </div>
+            </div> --}}
         </div>
     </header>
     @endif
