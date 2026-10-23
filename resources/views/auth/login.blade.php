@@ -71,14 +71,14 @@ $showRoleSelection = $isDirect && !$showLoginDirectly;
                     Dealer
                     <span class="selected-indicator" style="display: none;">✓</span>
                 </button>
-                <button type="button" class="role-button center-chief-btn" data-role="center chief" onclick="selectRole('center chief')">
+                {{-- <button type="button" class="role-button center-chief-btn" data-role="center chief" onclick="selectRole('center chief')">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="role-icon">
                         <path d="M12 3L19 6V11C19 15.5 16.1 19.6 12 21C7.9 19.6 5 15.5 5 11V6L12 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                     Center Chief
                     <span class="selected-indicator" style="display: none;">✓</span>
-                </button>
+                </button> --}}
                 
                 <button type="button" class="role-button client-btn" data-role="client" onclick="selectRole('client')">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="role-icon">

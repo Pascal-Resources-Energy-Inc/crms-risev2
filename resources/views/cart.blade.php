@@ -161,6 +161,7 @@
                                 $parts = explode(' ', $fullName);
                                 $lastName = array_pop($parts);
                                 $masked = str_repeat('*', strlen(implode(' ', $parts))) . ' ' . $lastName;
+                                $displayName = ($showCustomerFullName ?? false) ? $fullName : $masked;
                                 
                                 $serial = $customer->serial->serial_number ?? '';
                                 $masked_serial = str_repeat('*', max(0, strlen($serial) - 5)) . substr($serial, -5);
@@ -169,7 +170,7 @@
                                 $masked_number = str_repeat('*', max(0, strlen($number) - 5)) . substr($number, -5);
                             @endphp
                             <option value="{{ $customer->id }}" 
-                                data-name="{{ $masked }}" {{-- DISPLAY --}}
+                                data-name="{{ $displayName }}" {{-- DISPLAY --}}
                                 data-full-name="{{ $fullName }}" {{-- REAL --}}
                                 data-serial="{{ $serial }}" {{-- REAL --}}
                                 data-number="{{ $number }}" {{-- REAL --}}
