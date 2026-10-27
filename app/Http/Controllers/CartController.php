@@ -112,7 +112,8 @@ class CartController extends Controller
     public function index(Request $request)
     {
         $user = auth()->user();
-        $dealer = $user->dealer;
+        // Dealer and Mega Dealer accounts both use profiles in admin_crms.
+        $dealer = $user->usesMegaDealerPricing() ? $user->megaDealer : $user->dealer;
         [$originLat, $originLng] = $this->distanceOriginFor($user, $dealer);
 
         // Include every client in the dealer's MFI; a stove/serial record is
@@ -161,9 +162,7 @@ class CartController extends Controller
             $transactions = TransactionDetail::where('dealer_id', $user->id)->get();
         }
 
-        $center = $user->usesSrpPricing()
-            ? trim((string) optional($user->centerChief)->area)
-            : trim((string) optional($dealer)->area);
+        $center = $this->salesAreaFor($user, $dealer);
         
         // ✅ STEP 1: compute ALL ADs with distance
         $adsWithDistance = $areaDistributor->map(function ($ad) use ($originLat, $originLng) {
@@ -188,7 +187,8 @@ class CartController extends Controller
         $matchedADs = $center !== ''
             ? $adsWithDistance->filter(function ($ad) use ($center) {
                 return $ad->areas->contains(function ($area) use ($center) {
-                    return strtolower(trim((string) $area->area_name)) === strtolower($center);
+                    return strtolower(trim((string) $area->area_name)) === strtolower($center) &&
+                        strtolower(trim((string) $area->user_role)) === 'area distributor';
                 });
             })->values()
             : collect();
@@ -197,9 +197,9 @@ class CartController extends Controller
             ->sortBy(fn ($ad) => $ad->distance === null ? PHP_FLOAT_MAX : $ad->distance)
             ->values();
 
-        // A Center Chief must remain within the territory defined on their
-        // center_chiefs profile. Dealers retain their current fallback.
-        $availableADs = $user->usesSrpPricing()
+        // Dealer-facing roles can only order from an Area Distributor that
+        // is explicitly awarded their admin_crms sales territory.
+        $availableADs = $user->isDealerLike()
             ? $matchedADs
             : ($matchedADs->isNotEmpty() ? $matchedADs : $areaDistributor);
 
@@ -227,6 +227,18 @@ class CartController extends Controller
         }
 
         return [optional($dealer)->latitude, optional($dealer)->longitude];
+    }
+
+    /** Dealer and Mega Dealer order suppliers are matched by their sales area. */
+    private function salesAreaFor($user, $dealer = null)
+    {
+        if ($user->usesSrpPricing()) {
+            return trim((string) optional($user->centerChief)->area);
+        }
+
+        $profile = $dealer ?: ($user->usesMegaDealerPricing() ? $user->megaDealer : $user->dealer);
+
+        return trim((string) optional($profile)->area);
     }
 
     /**

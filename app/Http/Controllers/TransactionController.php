@@ -55,10 +55,13 @@ class TransactionController extends Controller
 
         $customersQuery = Client::whereHas('serial');
 
-        if ($user->usesSrpPricing()) {
-            $chiefMfi = trim((string) optional($user->centerChief)->mfi);
-            $customersQuery->when($chiefMfi !== '', function ($query) use ($chiefMfi) {
-                $query->whereRaw('LOWER(TRIM(mfi)) = ?', [strtolower($chiefMfi)]);
+        if ($user->isDealerLike()) {
+            $profile = $user->usesSrpPricing()
+                ? $user->centerChief
+                : ($user->usesMegaDealerPricing() ? $user->megaDealer : $user->dealer);
+            $mfi = trim((string) optional($profile)->mfi);
+            $customersQuery->when($mfi !== '', function ($query) use ($mfi) {
+                $query->whereRaw('LOWER(TRIM(mfi)) = ?', [strtolower($mfi)]);
             }, function ($query) {
                 $query->whereRaw('1 = 0');
             });
@@ -77,9 +80,7 @@ class TransactionController extends Controller
             $transactions = TransactionDetail::where('dealer_id', $user->id)->get();
         }
 
-        $center = $user->usesSrpPricing()
-            ? trim((string) optional($user->centerChief)->area)
-            : trim((string) optional($user->dealer)->area);
+        $center = $this->salesAreaFor($user);
 
         // ✅ GET ALL MATCHING ADs (NOT just first)
         $matchedADs = collect();
@@ -87,13 +88,14 @@ class TransactionController extends Controller
         if ($center !== '') {
             $matchedADs = AreaDistributor::whereHas('areas', function ($q) use ($center) {
                 $q->whereRaw('LOWER(TRIM(area_name)) = ?', [strtolower($center)])
+                    ->whereRaw('LOWER(TRIM(user_role)) = ?', ['area distributor'])
                     ->whereNull('deleted_at');
             })->get();
         }
 
-        // Center Chiefs can order only from distributors assigned to their
-        // sales territory. Keep the legacy dealer fallback unchanged.
-        $availableADs = $user->usesSrpPricing()
+        // Dealer-facing roles can only order from distributors assigned to
+        // their sales territory; never fall back to an unrelated AD.
+        $availableADs = $user->isDealerLike()
             ? $matchedADs
             : ($matchedADs->isNotEmpty() ? $matchedADs : $areaDistributor);
 
@@ -136,10 +138,13 @@ class TransactionController extends Controller
                 ? null
                 : Client::with('user')->findOrFail($request->customer_id);
 
-            if (!$isGuestTransaction && $user->usesSrpPricing()) {
-                $chiefMfi = trim((string) optional($user->centerChief)->mfi);
+            if (!$isGuestTransaction && $user->isDealerLike()) {
+                $profile = $user->usesSrpPricing()
+                    ? $user->centerChief
+                    : ($user->usesMegaDealerPricing() ? $user->megaDealer : $user->dealer);
+                $mfi = trim((string) optional($profile)->mfi);
 
-                if ($chiefMfi === '' || strtolower(trim((string) $client->mfi)) !== strtolower($chiefMfi)) {
+                if ($mfi === '' || strtolower(trim((string) $client->mfi)) !== strtolower($mfi)) {
                     throw \Illuminate\Validation\ValidationException::withMessages([
                         'customer_id' => ['The selected customer is not assigned to your MFI.'],
                     ]);
@@ -240,16 +245,19 @@ class TransactionController extends Controller
 
             $dealer = auth()->user();
 
-            if ($dealer->usesSrpPricing()) {
-                $territory = trim((string) optional($dealer->centerChief)->area);
-                $isAssignedDistributor = $territory !== '' && $ad->areas()
-                    ->whereRaw('LOWER(TRIM(area_name)) = ?', [strtolower($territory)])
-                    ->whereNull('deleted_at')
-                    ->exists();
+            if ($dealer->isDealerLike()) {
+                $territory = $this->salesAreaFor($dealer);
+                $isAssignedDistributor = $territory === ''
+                    ? !$dealer->usesSrpPricing()
+                    : $ad->areas()
+                        ->whereRaw('LOWER(TRIM(area_name)) = ?', [strtolower($territory)])
+                        ->whereRaw('LOWER(TRIM(user_role)) = ?', ['area distributor'])
+                        ->whereNull('deleted_at')
+                        ->exists();
 
                 if (!$isAssignedDistributor) {
                     throw \Illuminate\Validation\ValidationException::withMessages([
-                        'area_distributor_id' => ['The selected Area Distributor is outside your assigned sales territory.'],
+                        'area_distributor_id' => ['Select the Area Distributor assigned to your sales territory.'],
                     ]);
                 }
             }
@@ -612,6 +620,17 @@ class TransactionController extends Controller
         ][$role] ?? 'price';
 
         return $product->{$priceColumn} ?? $product->price ?? 0;
+    }
+
+    private function salesAreaFor($user)
+    {
+        if ($user->usesSrpPricing()) {
+            return trim((string) optional($user->centerChief)->area);
+        }
+
+        $profile = $user->usesMegaDealerPricing() ? $user->megaDealer : $user->dealer;
+
+        return trim((string) optional($profile)->area);
     }
 
     private function getDealerProductStock(Product $product, $dealerId)

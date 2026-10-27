@@ -27,7 +27,9 @@ class ProductController extends Controller
     {
         $user = auth()->user();
         // dd(auth()->user()->dealer);
-        $userDealer = optional($user->dealer);
+        // Both profile types are stored in admin_crms and provide the MFI
+        // and territory for the authenticated dealer-facing user.
+        $userDealer = optional($user->usesMegaDealerPricing() ? $user->megaDealer : $user->dealer);
         // dd($userDealer);
         $products = $this->applySalesTerritoryFilter(
             Product::with(['adProduct.areas'])->where('status', 'Activate'),
@@ -79,10 +81,11 @@ class ProductController extends Controller
             $transactions = TransactionDetail::where('dealer_id', auth()->user()->id)->get();
         }
 
-        $dealerProfile = null;
-        if (auth()->user()->isDealerLike()) {
-            $dealerProfile = Dealer::where('user_id', auth()->user()->id)->first();
-        }
+        $dealerProfile = auth()->user()->isDealerLike()
+            ? ($user->usesSrpPricing()
+                ? $user->centerChief
+                : ($user->usesMegaDealerPricing() ? $user->megaDealer : $user->dealer))
+            : null;
 
         return view('products', [
             'products' => $products,
@@ -483,7 +486,9 @@ class ProductController extends Controller
             return trim((string) optional($user->centerChief)->area);
         }
 
-        return trim((string) optional($user->dealer)->area);
+        $profile = $user->usesMegaDealerPricing() ? $user->megaDealer : $user->dealer;
+
+        return trim((string) optional($profile)->area);
     }
 
     /**
@@ -504,6 +509,7 @@ class ProductController extends Controller
 
         return $query->whereHas('adProduct.areas', function ($areaQuery) use ($territory) {
             $areaQuery->whereRaw('LOWER(TRIM(area_name)) = ?', [strtolower($territory)])
+                ->whereRaw('LOWER(TRIM(user_role)) = ?', ['area distributor'])
                 ->whereNull('deleted_at');
         });
     }
