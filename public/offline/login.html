@@ -9,31 +9,31 @@
     <meta name="csrf-token" content="">
 
     <title>GazLite Login</title>
-    <link rel="shortcut icon" href="http://localhost/images/aaa.png">
-    <link rel="icon" href="http://localhost/images/aaa.png">
+    <link rel="shortcut icon" href="../images/aaa.png">
+    <link rel="icon" href="../images/aaa.png">
     <meta name="csrf-token" content="">
 
-    <link rel="manifest" href="/manifest.json">
+    <link rel="manifest" href="../manifest.json">
+    <link rel="stylesheet" href="data.css">
     <meta name="theme-color" content="#000000">
 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/bcryptjs/2.4.3/bcrypt.min.js"></script>
+    <link href="../inside_css/assets/css/bootstrap.min.css" rel="stylesheet">
+    <script src="../inside_css/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
     
     <!-- Bootstrap Icons -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons/font/bootstrap-icons.css" rel="stylesheet" media="print" onload="this.media='all'">
     
     <!-- Icons Css -->
-    <link href="http://localhost/inside_css/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
+    <link href="../inside_css/assets/css/icons.min.css" rel="stylesheet" type="text/css" />
     <!-- App Css-->
-    <link href="http://localhost/inside_css/assets/css/app.min.css" rel="stylesheet" type="text/css" />
+    <link href="../inside_css/assets/css/app.min.css" rel="stylesheet" type="text/css" />
     <!-- SweetAlert2 -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="../inside_css/assets/libs/sweetalert2/sweetalert2.all.min.js"></script>
     
     <!-- custom Css-->
-    <link href="http://localhost/inside_css/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
+    <link href="../inside_css/assets/css/custom.min.css" rel="stylesheet" type="text/css" />
  
-    <link href="https://fonts.googleapis.com/css?family=Nunito" rel="stylesheet" type="text/css">
+    <link href="https://fonts.googleapis.com/css?family=Nunito" rel="stylesheet" type="text/css" media="print" onload="this.media='all'">
     
     <style>
         .loader {
@@ -43,7 +43,7 @@
             width: 100%;
             height: 100%;
             z-index: 9999;
-            background: url("http://localhost/login_css/images/loader.gif") 50% 50% no-repeat white;
+            background: url("../login_css/images/loader.gif") 50% 50% no-repeat white;
             opacity: .8;
             background-size: 120px 120px;
         }
@@ -528,9 +528,10 @@
             }
         }
     </style>
+    <link rel="stylesheet" href="ui.css">
 </head>
 
-<body>
+<body class="offline-auth">
     <!-- Network Status Indicator -->
     <div class="network-status offline" id="networkStatus" onclick="toggleNetworkMode()">
         <span class="network-status-dot"></span>
@@ -576,8 +577,8 @@
         <div class="role-content">
             <div class="role-wrapper">
                 <div class="welcome-section">
-                    <h1 class="welcome-title">Welcome to Gaz Lite !</h1>
-                    <p class="welcome-subtitle">Select 'Dealer' or 'Client' to get started.</p>
+                    <h1 class="welcome-title">Welcome to Gaz Lite</h1>
+                    <p class="welcome-subtitle">Choose Mega Dealer / Dealer or Client to continue.</p>
                 </div>
 
                 <div class="context-image-section">
@@ -596,7 +597,7 @@
                             <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                             <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        Dealer
+                        Mega Dealer / Dealer
                         <span class="selected-indicator" style="display: none;">✓</span>
                     </button>
                     
@@ -618,7 +619,7 @@
     <div class="login-page" id="loginFormPage" style="display: none;">
         <div class="login-header">
             <div class="header-left">
-                <button type="button" class="back-btn" onclick="showRoleSelection()">
+                <button type="button" class="back-btn" aria-label="Choose another account type" onclick="showRoleSelection()">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                         <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
@@ -639,6 +640,7 @@
                     </div>
                 </div>
 
+                <p class="offline-login-help" style="font-size:13px;color:#607b8e;line-height:1.5">Use the account you prepared with a successful online sign-in on this browser. Your password is verified on this device.</p>
                 <form method="POST" onsubmit="handleOfflineLogin(event)" id="loginForm">
                     <input type="hidden" name="_token" value="">                
                     <input type="hidden" name="selected_role" id="selectedRoleInput" value="">
@@ -647,6 +649,7 @@
                         <label for="email" class="input-label">Email or Phone Number</label>
                         <input 
                             id="email" 
+                            autocomplete="username"
                             type="text" 
                             class="form-input" 
                             name="email" 
@@ -661,6 +664,7 @@
                         <label class="input-label" for="password">Password</label>
                         <input 
                             id="password" 
+                            autocomplete="current-password"
                             type="password" 
                             class="form-input" 
                             placeholder="At least 8 characters" 
@@ -674,7 +678,7 @@
                     </button>
 
                     <div class="forgot-section">
-                        <a href="http://localhost/password/reset" class="forgot-link">
+                        <a href="../password/reset" class="forgot-link">
                             Forgot password?
                         </a>
                     </div>
@@ -689,18 +693,9 @@
         </div>
     </div>
 
-    <!-- Check if already logged in -->
-    <script>
-    (function() {
-        const offlineUser = localStorage.getItem('offlineUser');
-        const currentUserId = localStorage.getItem('current_user_id');
-        
-        if (offlineUser || currentUserId) {
-            document.documentElement.style.display = 'none';
-            window.location.replace('home.html');
-        }
-    })();
-    </script>
+    <script src="offline.js"></script>
+    <script src="auth.js"></script>
+    <script src="data.js"></script>
 
     <!-- Role Selection & Form Scripts -->
     <script>
@@ -811,297 +806,44 @@
 
     <!-- IndexedDB Login Scripts -->
     <script>
-    const DB_NAME = 'CRMSDB';
-    const STORE_NAME = 'users';
-    let db;
-
-    async function initDB() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(DB_NAME, 3);
-            
-            request.onerror = () => reject(request.error);
-            
-            request.onsuccess = () => {
-                db = request.result;
-                console.log('✅ Connected to CRMSDB database version', db.version);
-                resolve(db);
-            };
-            
-            request.onupgradeneeded = (e) => {
-                const database = e.target.result;
-                
-                if (!database.objectStoreNames.contains('users')) {
-                    const userStore = database.createObjectStore('users', { keyPath: 'id' });
-                    userStore.createIndex('email', 'email', { unique: false });
-                    userStore.createIndex('role', 'role', { unique: false });
-                    userStore.createIndex('name', 'name', { unique: false });
-                }
-                
-                if (!database.objectStoreNames.contains('clients')) {
-                    database.createObjectStore('clients', { keyPath: 'id' });
-                }
-                
-                if (!database.objectStoreNames.contains('dealers')) {
-                    database.createObjectStore('dealers', { keyPath: 'id' });
-                }
-                
-                if (!database.objectStoreNames.contains('transaction_details')) {
-                    database.createObjectStore('transaction_details', { keyPath: 'id' });
-                }
-            };
-        });
-    }
-
-    async function findUserByEmailOrPhone(input) {
-        try {
-            if (!db) await initDB();
-            
-            const transaction = db.transaction([STORE_NAME], 'readonly');
-            const store = transaction.objectStore(STORE_NAME);
-            
-            return new Promise(resolve => {
-                const request = store.getAll();
-                
-                request.onsuccess = () => {
-                    const users = request.result;
-                    console.log(`📊 Total users in CRMSDB: ${users.length}`);
-                    
-                    const user = users.find(u => {
-                        const userEmail = (u.email || '').toLowerCase().trim();
-                        const inputLower = (input || '').toLowerCase().trim();
-                        const userPhone = (u.phone || '').trim();
-                        
-                        return userEmail === inputLower || 
-                               (userPhone && userPhone === input);
-                    });
-                    
-                    if (user) {
-                        console.log('✅ User found:', user.name);
-                    } else {
-                        console.log('❌ No user found with email/phone:', input);
-                    }
-                    
-                    resolve(user);
-                };
-                
-                request.onerror = () => {
-                    console.error('❌ Error reading from CRMSDB:', request.error);
-                    resolve(null);
-                };
-            });
-        } catch (error) {
-            console.error('❌ Error finding user:', error);
-            return null;
-        }
-    }
-
-    async function validatePassword(inputPassword, storedHash) {
-        try {
-            console.log('🔒 Validating password...');
-            
-            if (!storedHash || storedHash === '') {
-                console.warn('⚠️ User has no password hash in database');
-                return false;
-            }
-            
-            if (typeof dcodeIO !== 'undefined' && typeof dcodeIO.bcrypt !== 'undefined') {
-                console.log('✅ Using bcrypt.js for password validation');
-                const bcrypt = dcodeIO.bcrypt;
-                const result = await bcrypt.compare(inputPassword, storedHash);
-                console.log('   Bcrypt comparison result:', result);
-                return result;
-            } else {
-                console.warn('⚠️ Bcrypt library not loaded, using fallback validation');
-                const result = inputPassword.length >= 8;
-                console.log('   Fallback validation result:', result);
-                return result;
-            }
-        } catch (error) {
-            console.error('❌ Password validation error:', error);
-            return inputPassword.length >= 8;
-        }
-    }
-
+    let offlineLoginPending = false;
+    window.addEventListener('offline-before-update', event => {
+        const identifier = document.getElementById('email');
+        const password = document.getElementById('password');
+        // Credentials remain in this document only. Finish or clear the form
+        // before an automatic update replaces the page.
+        if (offlineLoginPending || (identifier && identifier.value) || (password && password.value)) event.preventDefault();
+    });
     async function handleOfflineLogin(event) {
         event.preventDefault();
-        
+        if (offlineLoginPending) return;
+        const button = document.getElementById('signinButton');
         const loader = document.getElementById('loader');
-        if (loader) loader.style.display = 'flex';
-        
-        const emailInput = document.getElementById('email').value.trim();
+        const identifier = document.getElementById('email').value.trim();
         const password = document.getElementById('password').value;
-        const selectedRole = document.getElementById('selectedRoleInput').value;
-        
-        console.log('=== OFFLINE LOGIN ATTEMPT (CRMSDB) ===');
-        console.log('📧 Email/Phone:', emailInput);
-        console.log('🔑 Password length:', password.length);
-        console.log('👤 Selected role:', selectedRole);
-        
-        clearAllErrors();
-        
+        const role = document.getElementById('selectedRoleInput').value;
+        offlineLoginPending = true;
+        button.disabled = true;
+        button.textContent = 'Checking saved account…';
+        if (loader) loader.style.display = 'none';
         try {
-            if (!db) await initDB();
-            
-            const user = await findUserByEmailOrPhone(emailInput);
-            
-            if (!user) {
-                showError('email', 'These credentials do not match our records.');
-                if (loader) loader.style.display = 'none';
-                
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Login Failed',
-                    text: 'No account found with this email or phone number.',
-                    confirmButtonColor: '#5DADE2'
-                });
-                return;
-            }
-            
-            console.log('✅ User found in CRMSDB');
-            console.log('   Name:', user.name);
-            console.log('   Email:', user.email);
-            console.log('   Role:', user.role);
-            
-            if (selectedRole) {
-                const userRole = (user.role || '').trim();
-                const normalizedUserRole = userRole.toLowerCase();
-                const normalizedSelectedRole = selectedRole.toLowerCase();
-                
-                if (normalizedUserRole !== normalizedSelectedRole) {
-                    if (loader) loader.style.display = 'none';
-                    
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Role Mismatch',
-                        html: `This account is registered as <strong>${userRole}</strong>.<br><br>Please select <strong>${userRole}</strong> to continue.`,
-                        confirmButtonColor: '#5DADE2'
-                    });
-                    return;
-                }
-            }
-            
-            console.log('✅ Role validation passed');
-            
-            const isValidPassword = await validatePassword(password, user.password);
-            
-            console.log('🔒 Password validation result:', isValidPassword);
-            
-            if (!isValidPassword) {
-                showError('password', 'Invalid password.');
-                if (loader) loader.style.display = 'none';
-                
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Login Failed',
-                    text: 'The password you entered is incorrect.',
-                    confirmButtonColor: '#5DADE2'
-                });
-                return;
-            }
-            
-            console.log('✅ Login successful!');
-
+            if (!window.OfflineAuth) throw new Error('Offline sign-in files are not ready. Connect and update the offline version.');
+            const user = await OfflineAuth.authenticate(identifier, password, role);
+            OfflineAuth.startSession(user);
+            document.getElementById('password').value = '';
             if (loader) loader.style.display = 'none';
-
-            const sessionData = {
-                id: user.id,
-                name: user.name,
-                email: user.email,
-                role: user.role,
-                address: user.address || '',
-                phone: user.phone || '',
-                loginTime: new Date().toISOString()
-            };
-
-            localStorage.setItem('current_user_id', user.id.toString());
-            localStorage.setItem('current_user_role', user.role);
-            localStorage.setItem('current_user_name', user.name);
-            localStorage.setItem('current_user_email', user.email);
-            localStorage.setItem('offlineUser', JSON.stringify(sessionData));
-
-            console.log('💾 Session stored successfully');
-
-            if (typeof Swal !== 'undefined') {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Login Successful!',
-                    text: `Welcome back, ${user.name}!`,
-                    timer: 2000,
-                    showConfirmButton: false,
-                    timerProgressBar: true
-                }).then(() => {
-                    console.log('🏠 Redirecting to home...');
-                    window.location.href = 'home.html';
-                });
-            } else {
-                console.log('🏠 Redirecting to home...');
-                setTimeout(() => {
-                    window.location.href = 'home.html';
-                }, 1000);
-            }
-            
+            await Swal.fire({ icon: 'success', title: 'Signed in offline', text: 'Welcome back, ' + user.name + '!', timer: 900, showConfirmButton: false });
+            window.location.href = 'home.html';
         } catch (error) {
-            console.error('❌ Login error:', error);
             if (loader) loader.style.display = 'none';
-            
-            Swal.fire({
-                icon: 'error',
-                title: 'Login Error',
-                html: `An error occurred during login.<br><small>${error.message}</small>`,
-                confirmButtonColor: '#5DADE2'
-            });
+            await Swal.fire({ icon: 'error', title: 'Offline sign-in', text: error.message || 'Unable to verify this saved account.', confirmButtonColor: '#5DADE2' });
+        } finally {
+            offlineLoginPending = false;
+            button.disabled = false;
+            button.textContent = 'Sign in';
+            if (loader) loader.style.display = 'none';
         }
     }
-
-    function showError(fieldId, message) {
-        const inputElement = document.getElementById(fieldId);
-        
-        if (inputElement) {
-            inputElement.classList.add('error');
-            inputElement.style.backgroundColor = '#FFE5E5';
-            inputElement.style.border = '1px solid #FF6B6B';
-        }
-        
-        let errorElement = document.getElementById(fieldId + 'Error');
-        if (!errorElement) {
-            errorElement = document.createElement('div');
-            errorElement.id = fieldId + 'Error';
-            errorElement.className = 'error-text';
-            errorElement.style.color = '#FF6B6B';
-            errorElement.style.fontSize = '14px';
-            errorElement.style.marginTop = '6px';
-            if (inputElement && inputElement.parentNode) {
-                inputElement.parentNode.appendChild(errorElement);
-            }
-        }
-        
-        if (errorElement) {
-            errorElement.textContent = message;
-            errorElement.style.display = 'block';
-        }
-    }
-
-    window.addEventListener('DOMContentLoaded', async () => {
-        try {
-            await initDB();
-            console.log('✅ CRMSDB initialized and ready for offline login');
-            
-            if (typeof dcodeIO !== 'undefined' && typeof dcodeIO.bcrypt !== 'undefined') {
-                console.log('✅ Bcrypt library loaded successfully');
-            } else {
-                console.warn('⚠️ Bcrypt library not found. Using fallback password validation.');
-            }
-        } catch (error) {
-            console.error('❌ Error initializing CRMSDB:', error);
-            
-            Swal.fire({
-                icon: 'error',
-                title: 'Database Error',
-                text: 'Failed to initialize offline database. Please refresh the page.',
-                confirmButtonColor: '#5DADE2'
-            });
-        }
-    });
     </script>
 
     <script>
@@ -1109,97 +851,25 @@
         const networkStatusText = document.getElementById('networkStatusText');
         let isActuallyOnline = navigator.onLine;
         let networkCheckInterval = null;
-        let hasShownPrompt = false;
 
         async function checkRealNetworkStatus() {
+            if (!navigator.onLine) return false;
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
-                
-                await fetch('https://www.google.com/favicon.ico', {
-                    method: 'HEAD',
-                    mode: 'no-cors',
-                    cache: 'no-store',
-                    signal: controller.signal
-                });
-                
-                clearTimeout(timeoutId);
-                return true;
-            } catch (error) {
-                return false;
-            }
+                const response = await fetch(new URL('../manifest.json', window.location.href).href, { method: 'HEAD', cache: 'no-store', signal: controller.signal });
+                return response.ok;
+            } catch (error) { return false; }
+            finally { clearTimeout(timeoutId); }
         }
 
         async function updateNetworkStatusWithCheck() {
             const actuallyOnline = await checkRealNetworkStatus();
-            
-            if (actuallyOnline !== isActuallyOnline) {
-                const previousStatus = isActuallyOnline;
-                isActuallyOnline = actuallyOnline;
-                
-                if (actuallyOnline && !previousStatus && !hasShownPrompt) {
-                    hasShownPrompt = true;
-                    showOnlinePrompt();
-                    setTimeout(() => { hasShownPrompt = false; }, 2000);
-                } else if (!actuallyOnline && previousStatus) {
-                    showOfflineNotification();
-                }
-            }
-           
-                networkStatus.className = 'network-status offline';
-                networkStatusText.textContent = 'Offline Mode';
-        }
-
-        function showOnlinePrompt() {
-            Swal.fire({
-                icon: 'success',
-                title: 'Connection Restored',
-                html: `
-                    <p style="font-size: 16px; margin-bottom: 20px;">
-                        Your internet connection has been restored.
-                    </p>
-                    <p style="font-size: 14px; color: #666;">
-                        Would you like to go online or continue in offline mode?
-                    </p>
-                `,
-                showDenyButton: true,
-                showCancelButton: false,
-                confirmButtonText: '<i class="bi bi-wifi"></i> Go Online',
-                denyButtonText: '<i class="bi bi-wifi-off"></i> Stay Offline',
-                confirmButtonColor: '#2ecc71',
-                denyButtonColor: '#ff4757',
-                allowOutsideClick: false,
-                allowEscapeKey: false
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    redirectToOnline();
-                } else if (result.isDenied) {
-                    Swal.fire({
-                        icon: 'info',
-                        title: 'Staying Offline',
-                        text: 'You will continue using offline mode.',
-                        timer: 2000,
-                        showConfirmButton: false
-                    });
-                }
-            });
-        }
-
-        function showOfflineNotification() {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Connection Lost',
-                html: `
-                    <p style="font-size: 16px; margin-bottom: 15px;">
-                        Your internet connection has been lost.
-                    </p>
-                    <p style="font-size: 14px; color: #666;">
-                        You are now in offline mode. The app will notify you when your connection is restored.
-                    </p>
-                `,
-                confirmButtonText: 'OK',
-                confirmButtonColor: '#5BC2E7'
-            });
+            const previousStatus = isActuallyOnline;
+            isActuallyOnline = actuallyOnline;
+            networkStatus.className = 'network-status ' + (actuallyOnline ? 'online' : 'offline');
+            networkStatusText.textContent = actuallyOnline ? 'Connected' : 'Offline';
+            if (actuallyOnline && !previousStatus) window.dispatchEvent(new CustomEvent('offline-connection-restored'));
         }
 
         function redirectToOnline() {
@@ -1296,14 +966,5 @@
         });
     </script>
 
-    <script src="http://localhost/inside_css/assets/libs/bootstrap/js/bootstrap.bundle.min.js"></script>
-    <script src="http://localhost/inside_css/assets/libs/simplebar/simplebar.min.js"></script>
-    <script src="http://localhost/inside_css/assets/libs/node-waves/waves.min.js"></script>
-    <script src="http://localhost/inside_css/assets/libs/feather-icons/feather.min.js"></script>
-    <script src="http://localhost/inside_css/assets/js/pages/plugins/lord-icon-2.1.0.js"></script>
-    <script src="http://localhost/inside_css/assets/js/plugins.js"></script>
-    <script src="http://localhost/inside_css/assets/libs/particles.js/particles.js"></script>
-    <script src="http://localhost/inside_css/assets/js/pages/particles.app.js"></script>
-    <script src="http://localhost/inside_css/assets/js/pages/password-addon.init.js"></script>
 </body>
 </html>

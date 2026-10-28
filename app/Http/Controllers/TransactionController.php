@@ -9,6 +9,7 @@ use App\Item;
 use App\Product;
 use App\Client;
 use App\Dealer;
+use App\Support\OrderReference;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -189,7 +190,8 @@ class TransactionController extends Controller
                         ? 'Transaction saved as pending because dealer stock is not available yet'
                         : 'Transaction saved successfully',
                     'status' => $transactionStatus,
-                    'transaction_id' => $transaction->id
+                    'id' => $transaction->id,
+                    'transaction_id' => $transaction->transaction_id
                 ], 200);
             }
 
@@ -262,17 +264,12 @@ class TransactionController extends Controller
                 }
             }
 
-            $last = OrderDetail::latest('id')->first();
-            $nextNumber = $last ? $last->id + 1 : 1;
-            $transactionCode = 'PRORD-' . str_pad($nextNumber, 4, '0', STR_PAD_LEFT);
-
             $transaction = new OrderDetail;
             if (Schema::hasColumn('order_details', 'product_id')) {
                 $transaction->product_id = $item->id;
             }
             $transaction->item = $item->product_name;
             $transaction->sku = $item->sku;
-            $transaction->transaction_id = $transactionCode;
             $transaction->points_dealer = $item->dealer_points * $request->qty;
             // $transaction->points_client = $item->customer_points * $request->qty;
             $transaction->item_description = $item->description;
@@ -296,7 +293,7 @@ class TransactionController extends Controller
                 $transaction->delivery_fee = $request->delivery_fee ?? 0;
             }
             $transaction->status = 'Pending';
-            $transaction->save();
+            OrderReference::save($transaction);
 
             // ✅ SEND EMAIL TO AD
             if ($ad->user && $ad->user->email) {
@@ -365,6 +362,7 @@ class TransactionController extends Controller
             }
 
             $transaction = new TransactionDetail;
+            $transaction->transaction_id = 'TRX-' . time() . '-' . rand(1000, 9999);
             $transaction->item = $item->item;
             $transaction->points_dealer = $item->dealer_points * $request->qty;
             $transaction->points_client = $item->customer_points * $request->qty;
@@ -383,7 +381,8 @@ class TransactionController extends Controller
                 'success' => true,
                 'message' => 'Transaction saved successfully',
                 'data' => [
-                    'transaction_id' => $transaction->id,
+                    'id' => $transaction->id,
+                    'transaction_id' => $transaction->transaction_id,
                     'item' => $transaction->item,
                     'qty' => $transaction->qty,
                     'price' => $transaction->price,
@@ -423,6 +422,7 @@ class TransactionController extends Controller
         $client = Client::findOrFail($request->customer_id);
 
         $transaction = new TransactionDetail;
+        $transaction->transaction_id = 'TRX-' . time() . '-' . rand(1000, 9999);
         $transaction->item = $item->item;
         $transaction->points_dealer = $item->dealer_points * $request->qty;
         $transaction->points_client = $item->customer_points * $request->qty;
@@ -474,6 +474,7 @@ class TransactionController extends Controller
                 }
                 
                 $transaction = new TransactionDetail();
+                $transaction->transaction_id = 'TRX-' . time() . '-' . rand(1000, 9999);
                 $transaction->item = $item->item;
                 $transaction->points_dealer = $item->dealer_points * $itemData['quantity'];
                 $transaction->points_client = $item->customer_points * $itemData['quantity'];

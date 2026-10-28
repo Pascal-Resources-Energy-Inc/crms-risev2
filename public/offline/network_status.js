@@ -6,7 +6,6 @@
     textElement: null,
     isActuallyOnline: navigator.onLine,
     checkInterval: null,
-    hasShownPrompt: false,
 
     init: function(statusElementId = 'networkStatus', textElementId = 'networkStatusText') {
       this.statusElement = document.getElementById(statusElementId);
@@ -22,21 +21,22 @@
     },
 
     checkRealNetworkStatus: async function() {
+      if (!navigator.onLine) return false;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-        await fetch('https://www.google.com/favicon.ico', {
+        const basePath = window.location.pathname.split('/offline/')[0];
+        const response = await fetch(basePath + '/manifest.json', {
           method: 'HEAD',
-          mode: 'no-cors',
           cache: 'no-store',
           signal: controller.signal
         });
 
-        clearTimeout(timeoutId);
-        return true;
+        return response.ok;
       } catch (error) {
         return false;
+      } finally {
+        clearTimeout(timeoutId);
       }
     },
 
@@ -51,11 +51,7 @@
           this.statusElement.className = 'network-status online';
           this.textElement.textContent = 'Online';
 
-          if (!previousStatus && !this.hasShownPrompt) {
-            this.hasShownPrompt = true;
-            this.showOnlinePrompt();
-            setTimeout(() => { this.hasShownPrompt = false; }, 2000);
-          }
+          if (!previousStatus) window.dispatchEvent(new CustomEvent('offline-connection-restored'));
         } else {
           this.statusElement.className = 'network-status offline';
           this.textElement.textContent = 'Offline';

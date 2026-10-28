@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use App\AreaDistributor;
+use App\Support\OfflineLoginGrant;
 
 class LoginController extends Controller
 {
@@ -120,6 +121,7 @@ class LoginController extends Controller
             return response()->json([
                 'success' => true,
                 'redirect' => $redirect,
+                'offline_login' => OfflineLoginGrant::forUser($user),
                 // This is intentionally limited to non-sensitive data. The
                 // browser uses it only to identify a previously authenticated
                 // user while the offline pages are open.

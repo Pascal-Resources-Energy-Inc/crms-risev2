@@ -93,6 +93,9 @@ Route::post('/rewards', 'RewardController@store')->name('rewards.store');
 
 
 // User Sync Route for offline mode
+Route::get('/api/offline/snapshot', 'OfflineOrderController@snapshot')->middleware('auth')->name('offline.snapshot');
+Route::get('/api/offline/session', 'OfflineOrderController@session')->middleware('auth')->name('offline.session');
+Route::post('/api/offline/orders', 'OfflineOrderController@store')->middleware('auth')->name('offline.orders');
 Route::get('/api/get-users', 'UserController@getUsers')->name('api.users');
 Route::get('/api/get-dealers', 'DealerController@getDealers')->name('api.dealers');
 Route::get('/api/get-clients', 'ClientController@getClients')->name('api.clients');

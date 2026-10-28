@@ -88,6 +88,8 @@
             display: none;
         }
 
+        .launch-recovery{max-width:32rem;margin:20px;padding:20px;border-radius:14px;background:#fff;color:#173c50;line-height:1.5}
+        .launch-recovery[hidden]{display:none}.launch-recovery button{margin-top:12px;min-height:44px;padding:10px 20px;border:0;border-radius:8px;background:#086b97;color:#fff;font:inherit;cursor:pointer}
         .debug-info.show {
             display: block;
         }
@@ -100,163 +102,110 @@
         </div>
         <h1 style="font-size: 32px; margin-bottom: 10px;">GazLite</h1>
         <p class="status-text" id="statusText">Initializing...</p>
-        <div class="spinner"></div>
+        <div class="spinner" id="launchSpinner"></div>
+        <div class="launch-recovery" id="launchRecovery" hidden>
+            <p>Open Gaz Lite online at this same address to finish offline setup. Your saved data and pending transactions are kept.</p>
+            <button type="button" id="retryLaunch">Try again</button>
+        </div>
     </div>
 
     <div class="debug-info" id="debugInfo"></div>
 
     <script>
-        // Enable debug mode (set to false in production)
-        const DEBUG = true;
-
-        function log(message) {
-            console.log(`[PWA Launcher] ${message}`);
-            if (DEBUG) {
-                const debugInfo = document.getElementById('debugInfo');
-                debugInfo.textContent = message;
-                debugInfo.classList.add('show');
-            }
+    (function () {
+        'use strict';
+        const base = window.location.pathname.replace(/\/pwa-launcher\.html$/, '').replace(/\/$/, '');
+        let launching = false;
+        const node = id => document.getElementById(id);
+        const status = text => { node('statusText').textContent = text; };
+        function recover() {
+            status('Offline setup is not ready yet. Connect at this same address and try again.');
+            node('launchSpinner').hidden = true;
+            node('launchRecovery').hidden = false;
+            launching = false;
         }
-
-        function updateStatus(text) {
-            document.getElementById('statusText').textContent = text;
-        }
-
-        async function checkConnection() {
-            log('Checking network connection...');
-            updateStatus('Checking connection...');
-
-            // First check: navigator.onLine
-            if (!navigator.onLine) {
-                log('navigator.onLine = false');
-                return false;
-            }
-
-            // Second check: Try to fetch a reliable endpoint
+        function signedIn() {
             try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
-                
-                const response = await fetch('https://www.google.com/generate_204', {
-                    method: 'HEAD',
-                    cache: 'no-store',
-                    signal: controller.signal
-                });
-                
-                clearTimeout(timeoutId);
-                log(`Connection test: ${response.ok ? 'ONLINE' : 'OFFLINE'}`);
-                return response.ok;
-            } catch (error) {
-                log(`Connection test failed: ${error.message}`);
-                return false;
-            }
+                const saved = localStorage.getItem('offlineUser');
+                const user = saved ? JSON.parse(saved) : { id: localStorage.getItem('current_user_id'), role: localStorage.getItem('current_user_role') };
+                const id = Number(user && user.id), timestamp = user && user.loginTime && Date.parse(user.loginTime);
+                return Number.isSafeInteger(id) && id > 0 && typeof user.role === 'string' && !!user.role.trim() &&
+                    (!user.loginTime || (Number.isFinite(timestamp) && Date.now() - timestamp <= 24 * 60 * 60 * 1000));
+            } catch (_) { return false; }
         }
-
-        function getBasePath() {
-            const path = window.location.pathname;
-            if (path.includes('/crms-risev2/public')) {
-                return '/crms-risev2/public';
-            }
-            return '';
+        async function connected() {
+            if (!navigator.onLine) return false;
+            const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 3000);
+            try { return (await fetch(base + '/manifest.json', { method: 'HEAD', cache: 'no-store', signal: controller.signal })).ok; }
+            catch (_) { return false; }
+            finally { clearTimeout(timer); }
         }
-
-        function checkAuthentication() {
-            log('Checking authentication...');
-            
-            const offlineUser = localStorage.getItem('offlineUser');
-            const currentUserId = localStorage.getItem('current_user_id');
-            
-            log(`offlineUser: ${offlineUser ? 'EXISTS' : 'MISSING'}`);
-            log(`current_user_id: ${currentUserId || 'MISSING'}`);
-            
-            if (offlineUser) {
-                try {
-                    const userData = JSON.parse(offlineUser);
-                    
-                    // Check session expiry
-                    if (userData.loginTime) {
-                        const sessionAge = Date.now() - new Date(userData.loginTime).getTime();
-                        const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-                        
-                        if (sessionAge > maxAge) {
-                            log('Session expired');
-                            // Clear expired session
-                            localStorage.removeItem('offlineUser');
-                            localStorage.removeItem('current_user_id');
-                            localStorage.removeItem('current_user_role');
-                            return { authenticated: false };
-                        }
-                    }
-                    
-                    log(`Authenticated as: ${userData.name}`);
-                    return { authenticated: true, user: userData };
-                } catch (e) {
-                    log(`Error parsing offlineUser: ${e.message}`);
-                    localStorage.removeItem('offlineUser');
-                }
-            }
-            
-            if (currentUserId) {
-                log('Authenticated via current_user_id');
-                return { authenticated: true };
-            }
-            
-            log('Not authenticated');
-            return { authenticated: false };
+        function readiness(worker) {
+            return new Promise(resolve => {
+                const channel = new MessageChannel();
+                const timer = setTimeout(() => { channel.port1.close(); resolve(null); }, 3000);
+                channel.port1.onmessage = event => {
+                    clearTimeout(timer); channel.port1.close();
+                    resolve(event.data && typeof event.data.ready === 'boolean' ? event.data.ready : null);
+                };
+                try { worker.postMessage({ type: 'GET_OFFLINE_STATUS' }, [channel.port2]); }
+                catch (_) { clearTimeout(timer); channel.port1.close(); resolve(false); }
+            });
         }
-
-        async function redirect() {
-            const BASE_PATH = getBasePath();
-            log(`Base path: ${BASE_PATH}`);
-            
-            const isOnline = await checkConnection();
-            const auth = checkAuthentication();
-            
-            log(`Online: ${isOnline}, Authenticated: ${auth.authenticated}`);
-            
-            let targetUrl;
-            
-            if (isOnline) {
-                // ONLINE - Go to Laravel routes
-                updateStatus('Loading online version...');
-                log('Redirecting to ONLINE version');
-                
-                if (auth.authenticated) {
-                    targetUrl = `${BASE_PATH}/home`;
-                } else {
-                    targetUrl = `${BASE_PATH}/login`;
-                }
-            } else {
-                // OFFLINE - Go to static HTML pages
-                updateStatus('Loading offline version...');
-                log('Redirecting to OFFLINE version');
-                
-                if (auth.authenticated) {
-                    targetUrl = `${BASE_PATH}/offline/home.html`;
-                } else {
-                    targetUrl = `${BASE_PATH}/offline/login.html`;
-                }
-            }
-            
-            log(`Final target: ${targetUrl}`);
-            
-            // Small delay for smooth transition
-            setTimeout(() => {
-                window.location.replace(targetUrl);
-            }, 500);
+        function activated(registration) {
+            const worker = registration.installing || registration.waiting || registration.active;
+            if (!worker) return Promise.resolve(null);
+            if (worker.state === 'activated') return Promise.resolve(worker);
+            return new Promise(resolve => {
+                const done = value => { clearTimeout(timer); worker.removeEventListener('statechange', changed); resolve(value); };
+                const changed = () => {
+                    if (worker.state === 'activated') done(worker);
+                    else if (worker.state === 'redundant') done(null);
+                };
+                const timer = setTimeout(() => done(null), 15000);
+                worker.addEventListener('statechange', changed); changed();
+            });
         }
-
-        // Start the launcher
-        window.addEventListener('load', () => {
-            log('PWA Launcher started');
-            redirect();
-        });
-
-        // Handle cases where window.load doesn't fire
-        if (document.readyState === 'complete') {
-            log('Document already loaded');
-            redirect();
+        async function prepare() {
+            if (!navigator.serviceWorker) return false;
+            let timer;
+            const setup = async () => {
+                const registration = await navigator.serviceWorker.register(base + '/sw.js', { scope: base + '/', updateViaCache: 'none' });
+                await registration.update();
+                const worker = await activated(registration);
+                return worker && await readiness(worker) === true;
+            };
+            try { return await Promise.race([setup(), new Promise(resolve => { timer = setTimeout(() => resolve(false), 20000); })]); }
+            catch (_) { return false; }
+            finally { clearTimeout(timer); }
         }
+        async function available() {
+            if (!navigator.serviceWorker) return false;
+            try {
+                const registration = await navigator.serviceWorker.getRegistration(base + '/');
+                const worker = registration && registration.active;
+                return worker && (await readiness(worker)) !== false;
+            } catch (_) { return false; }
+        }
+        async function launch() {
+            if (launching) return;
+            launching = true;
+            status('Checking connection…');
+            let online = await connected();
+            if (online) { status('Preparing offline pages…'); await prepare(); online = await connected(); }
+            if (online) {
+                status('Loading online version…');
+                window.location.replace(base + (signedIn() ? '/home' : '/login'));
+            } else if (await available()) {
+                status('Loading saved offline version…');
+                window.location.replace(base + '/offline/' + (signedIn() ? 'home.html' : 'login.html'));
+            } else recover();
+        }
+        function start() { launch().catch(recover); }
+        node('retryLaunch').onclick = () => { node('launchRecovery').hidden = true; node('launchSpinner').hidden = false; start(); };
+        window.addEventListener('online', start);
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true }); else start();
+    })();
     </script>
 </body>
 </html>

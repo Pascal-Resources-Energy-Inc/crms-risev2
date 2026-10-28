@@ -1,734 +1,110 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Account Page</title>
-
-  <link rel="stylesheet" href="../offline/style.css">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-
-  <style>
-    body {
-        padding: 0 !important;
-        margin: 0 !important;
-        font-family: 'Poppins', sans-serif;
-        background: #f8f9fa;
-    }
-
-    .account-wrapper {
-        min-height: 100vh;
-        background: #f8f9fa;
-        padding: 0;
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-    }
-
-    .account-header {
-        background: linear-gradient(135deg, #5BC2E7 0%, #4facfe 100%);
-        padding: 60px 20px 40px;
-        color: white;
-        position: relative;
-        text-align: center;
-    }
-
-    .back-button {
-        position: absolute;
-        top: 20px;
-        left: 20px;
-        background: rgba(255, 255, 255, 0.2);
-        border: none;
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        backdrop-filter: blur(10px);
-    }
-
-    .back-button:hover {
-        background: rgba(255, 255, 255, 0.3);
-        transform: scale(1.05);
-    }
-
-    .back-button i {
-        color: white;
-        font-size: 20px;
-    }
-
-    .profile-section {
-        text-align: center;
-        padding: 20px 0;
-    }
-
-    .profile-avatar {
-        width: 100px;
-        height: 100px;
-        border-radius: 50%;
-        border: 4px solid white;
-        margin: 0 auto 15px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        object-fit: cover;
-    }
-
-    .profile-name {
-        font-size: 20px;
-        font-weight: 700;
-        margin: 0 0 5px 0;
-        text-transform: uppercase;
-    }
-
-    .profile-email {
-        font-size: 14px;
-        opacity: 0.9;
-        margin: 0;
-    }
-
-    .menu-section {
-        background: white;
-        margin: 20px 20px 20px;
-        border-radius: 20px;
-        padding: 20px 0;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-    }
-
-    .menu-item {
-        display: flex;
-        align-items: center;
-        padding: 16px 20px;
-        text-decoration: none;
-        color: #333;
-        transition: all 0.2s ease;
-        border-bottom: 1px solid #f0f0f0;
-    }
-
-    .menu-item:last-child {
-        border-bottom: none;
-    }
-
-    .menu-item:hover {
-        background: #f8f9fa;
-    }
-
-    .menu-icon {
-        width: 40px;
-        height: 40px;
-        border-radius: 12px;
-        background: #f0f7ff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-right: 15px;
-        flex-shrink: 0;
-    }
-
-    .menu-icon i {
-        font-size: 20px;
-        color: #5BC2E7;
-    }
-
-    .menu-content {
-        flex: 1;
-    }
-
-    .menu-title {
-        font-size: 15px;
-        font-weight: 600;
-        margin: 0 0 2px 0;
-        color: #333;
-    }
-
-    .menu-subtitle {
-        font-size: 12px;
-        color: #999;
-        margin: 0;
-    }
-
-    .menu-arrow {
-        color: #ccc;
-        font-size: 18px;
-    }
-
-    .stats-section {
-        padding: 20px;
-        display: flex;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 20px !important;
-    }
-
-    .stat-card {
-        flex: 1;
-        background: white;
-        border-radius: 16px;
-        padding: 20px;
-        text-align: center;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-    }
-
-    .stat-value {
-        font-size: 28px;
-        font-weight: 700;
-        color: #5BC2E7;
-        margin: 0 0 5px 0;
-    }
-
-    .stat-label {
-        font-size: 13px;
-        color: #999;
-        margin: 0;
-    }
-
-    .logout-section {
-        padding: 20px;
-        margin-top: auto;
-        background: #f8f9fa;
-    }
-
-    .logout-button {
-        width: 100%;
-        padding: 16px;
-        background: white;
-        border: 2px solid #fee2e2;
-        border-radius: 12px;
-        color: #dc2626;
-        font-size: 15px;
-        font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 10px;
-    }
-
-    .logout-button:hover {
-        background: #fee2e2;
-    }
-
-    .logout-button i {
-        font-size: 20px;
-    }
-
-    .network-status {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        padding: 8px 14px;
-        border-radius: 20px;
-        font-size: 11px;
-        font-weight: 600;
-        z-index: 9999;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    }
-
-    .network-status:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-    }
-
-    .network-status.offline {
-        background: #ff4757;
-        color: white;
-    }
-
-    .network-status.online {
-        background: #2ecc71;
-        color: white;
-    }
-
-    .network-status-dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: white;
-        animation: pulse 2s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-        0%, 100% {
-            opacity: 1;
-            transform: scale(1);
-        }
-        50% {
-            opacity: 0.5;
-            transform: scale(0.9);
-        }
-    }
-
-    @media (max-width: 768px) {
-        .account-header {
-            padding: 50px 15px 30px;
-        }
-
-        .profile-avatar {
-            width: 80px;
-            height: 80px;
-        }
-
-        .profile-name {
-            font-size: 20px;
-        }
-
-        .menu-section {
-            margin: 15px 15px 15px;
-        }
-
-        .logout-section {
-            padding: 20px 15px;
-        }
-    }
-  </style>
-</head>
-
-<body>
-    <div class="network-status offline" id="networkStatus" onclick="toggleNetworkMode()">
-        <span class="network-status-dot"></span>
-        <span id="networkStatusText">Offline Mode</span>
-    </div>
-
-  <div class="account-wrapper">
-    <div class="account-header">
-      <button class="back-button" onclick="window.location.href='home.html'">
-        <i class="bi bi-arrow-left"></i>
-      </button>
-      <div class="profile-section">
-        <img src="../images/aaa.png"
-              onerror="this.src='images/aaa.png';"
-              alt="Avatar Image"
-              class="profile-avatar">
-        <h2 class="profile-name"></h2>
-        <p class="profile-email">maria.catalina.rances@gmail.com</p>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="theme-color" content="#1178aa">
+    <title>
+      Gaz Lite · Your profile
+    </title>
+    <link rel="manifest" href="../manifest.json">
+    <link rel="stylesheet" href="data.css">
+    <link rel="stylesheet" href="ui.css">
+  </head>
+  <body class="offline-app page-account" data-workspace="account">
+    <header class="page-header">
+      <div class="brand-lockup">
+        <span class="brand-mark" aria-hidden="true"><img src="../images/logo_nya.png" alt=""></span>
+        <div>
+          <p class="eyebrow">Gaz Lite workspace</p>
+          <h1 id="workspaceTitle">Your profile</h1>
+          <p>Your account details, securely saved on this device.</p>
+        </div>
       </div>
-    </div>
-
-    <div class="menu-section">
-      <a href="#" class="menu-item">
-        <div class="menu-icon"><i class="bi bi-person"></i></div>
-        <div class="menu-content">
-          <h4 class="menu-title">Account Settings</h4>
-          <p class="menu-subtitle">View and edit your profile</p>
+      <span class="saved-mode" id="workspaceConnection" role="status">Checking connection</span>
+    </header>
+    <main>
+      <section class="connection-strip" aria-label="Automatic sync status">
+        <span class="connection-symbol" aria-hidden="true">↻</span>
+        <div class="connection-copy">
+          <strong id="workspaceSyncLabel">Automatic sync is ready</strong>
+          <p id="workspaceSyncDetail">Pending transactions sync and saved data refresh when your connection returns.</p>
         </div>
-        <i class="bi bi-chevron-right menu-arrow"></i>
-      </a>
-
-      <a href="#" class="menu-item">
-        <div class="menu-icon"><i class="bi bi-clock-history"></i></div>
-        <div class="menu-content">
-          <h4 class="menu-title">Subscription History</h4>
-          <p class="menu-subtitle">View your redemption history</p>
+        <span class="connection-count" id="workspaceQueue">Reading saved work…</span>
+      </section>
+      <p class="notice" id="workspaceNotice" role="status" hidden>
+      </p>
+      <section class="card quick-actions">
+        <div class="button-row">
+          <a class="button primary" href="products.html">
+            Open Products
+          </a>
+          <button type="button" class="button" id="workspaceRefresh">
+            Refresh data
+          </button>
+          <button type="button" class="button" id="workspaceSync" disabled>
+            Sync now
+          </button>
         </div>
-        <i class="bi bi-chevron-right menu-arrow"></i>
-      </a>
-
-      <a href="#" class="menu-item">
-        <div class="menu-icon"><i class="bi bi-receipt"></i></div>
-        <div class="menu-content">
-          <h4 class="menu-title">Business Information</h4>
-          <p class="menu-subtitle">View all your transactions</p>
+        <p class="muted" id="workspaceSavedAt">
+          Loading saved account data…
+        </p>
+      </section>
+      <section class="card">
+        <h2>
+          Profile information
+        </h2>
+        <dl class="profile" id="profileDetails">
+        </dl>
+        <p class="muted">
+          These details come from your latest saved account update. Connect online to edit your profile.
+        </p>
+        <div class="button-row">
+          <a class="button primary" id="onlineProfile" href="../account">
+            Open online profile
+          </a>
+          <button type="button" class="button danger" id="logoutButton">
+            Sign out
+          </button>
         </div>
-        <i class="bi bi-chevron-right menu-arrow"></i>
+      </section>
+      <section class="card">
+        <h2>
+          Offline access
+        </h2>
+        <p class="muted">
+          Your saved catalog, assigned customers, Area Distributors and transaction queue are specific to this account. Your device keeps pending transactions until the server accepts them.
+        </p>
+        <p class="muted" id="profileSavedAt">
+        </p>
+      </section>
+      <p class="legacy-note">
+        Records from older offline versions are retained on this device. Open the online dashboard to review those older records. This page shows only the latest history included in your saved update, up to 500 client transactions and 500 AD orders.
+      </p>
+    </main>
+    <nav class="bottom-nav" aria-label="Main navigation">
+      <a href="home.html">
+        Home
       </a>
-
-      <a href="#" class="menu-item">
-        <div class="menu-icon"><i class="bi bi-info-circle"></i></div>
-        <div class="menu-content">
-          <h4 class="menu-title">Help & Support</h4>
-          <p class="menu-subtitle">Get help and contact support</p>
-        </div>
-        <i class="bi bi-chevron-right menu-arrow"></i>
+      <a href="products.html">
+        Products
       </a>
-    </div>
-
-    <div class="logout-section">
-      <button class="logout-button" onclick="logoutOfflineUser()">
-        <i class="bi bi-box-arrow-right"></i>
-        Log Out
-      </button>
-    </div>
-  </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>
-    async function loadCurrentUserInfo() {
-        try {
-            const offlineUser = localStorage.getItem('offlineUser');
-            const currentUserId = localStorage.getItem('current_user_id');
-            const currentUserName = localStorage.getItem('current_user_name');
-            const currentUserEmail = localStorage.getItem('current_user_email');
-            const currentUserRole = localStorage.getItem('current_user_role');
-
-            let userData = null;
-
-            if (offlineUser) {
-                try {
-                    userData = JSON.parse(offlineUser);
-                    console.log('✅ User data loaded from offlineUser:', userData);
-                } catch (e) {
-                    console.warn('⚠️ Failed to parse offlineUser');
-                }
-            }
-
-            if (!userData && currentUserId) {
-                userData = {
-                    id: currentUserId,
-                    name: currentUserName || 'User',
-                    email: currentUserEmail || '',
-                    role: currentUserRole || '',
-                    phone: localStorage.getItem('current_user_phone') || '',
-                    address: localStorage.getItem('current_user_address') || ''
-                };
-                console.log('✅ User data loaded from individual localStorage items:', userData);
-            }
-
-            if (!userData && currentUserId) {
-                userData = await fetchUserFromDB(currentUserId);
-                console.log('✅ User data loaded from IndexedDB:', userData);
-            }
-
-            if (userData) {
-                displayUserInfo(userData);
-            } else {
-                console.error('❌ No user data found');
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'Session Expired',
-                    text: 'Please log in again.',
-                    confirmButtonColor: '#5BC2E7'
-                }).then(() => {
-                    window.location.href = 'login.html';
-                });
-            }
-
-        } catch (error) {
-            console.error('❌ Error loading user info:', error);
-            Swal.fire({
-                icon: 'error',
-                title: 'Error',
-                text: 'Failed to load user information.',
-                confirmButtonColor: '#5BC2E7'
-            });
-        }
-    }
-
-    async function fetchUserFromDB(userId) {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open('CRMSDB', 3);
-
-            request.onsuccess = (event) => {
-                const db = event.target.result;
-                const transaction = db.transaction(['users'], 'readonly');
-                const store = transaction.objectStore('users');
-                const getRequest = store.get(parseInt(userId));
-
-                getRequest.onsuccess = () => {
-                    resolve(getRequest.result);
-                };
-
-                getRequest.onerror = () => {
-                    reject(getRequest.error);
-                };
-            };
-
-            request.onerror = () => {
-                reject(request.error);
-            };
-        });
-    }
-
-    function displayUserInfo(userData) {
-        const profileNameElement = document.querySelector('.profile-name');
-        if (profileNameElement && userData.name) {
-            profileNameElement.textContent = userData.name.toUpperCase();
-        }
-
-        const profileEmailElement = document.querySelector('.profile-email');
-        if (profileEmailElement) {
-            if (userData.email) {
-                profileEmailElement.textContent = userData.email;
-            } else if (userData.phone) {
-                profileEmailElement.textContent = userData.phone;
-            } else {
-                profileEmailElement.textContent = 'No email available';
-            }
-        }
-
-        if (userData.role) {
-            const roleInfo = document.createElement('p');
-            roleInfo.style.cssText = `
-                background: rgba(255, 255, 255, 0.3);
-                display: inline-block;
-                padding: 6px 16px;
-                border-radius: 20px;
-                font-size: 12px;
-                margin-top: 8px;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 1px;
-            `;
-            roleInfo.textContent = userData.role;
-            
-            const profileSection = document.querySelector('.profile-section');
-            if (profileSection) {
-                profileSection.appendChild(roleInfo);
-            }
-        }
-
-        console.log('✅ User info displayed successfully');
-    }
-
-    function logoutOfflineUser() {
-        Swal.fire({
-            title: 'Log Out?',
-            text: 'Are you sure you want to log out?',
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonText: 'Yes, Log Out',
-            cancelButtonText: 'Cancel',
-            confirmButtonColor: '#dc2626',
-            cancelButtonColor: '#6c757d'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                localStorage.removeItem('offlineUser');
-                localStorage.removeItem('current_user_id');
-                localStorage.removeItem('current_user_name');
-                localStorage.removeItem('current_user_email');
-                localStorage.removeItem('current_user_role');
-                localStorage.removeItem('current_user_phone');
-                localStorage.removeItem('current_user_address');
-                
-                localStorage.removeItem('dealerCartData');
-                localStorage.removeItem('dealerCartItems');
-                localStorage.removeItem('dealerOrderData');
-                localStorage.removeItem('selectedCustomerId');
-                localStorage.removeItem('selectedCustomerName');
-                localStorage.removeItem('selectedCustomerSerial');
-                localStorage.removeItem('selectedCustomerNumber');
-
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Logged Out',
-                    text: 'You have been successfully logged out.',
-                    timer: 1500,
-                    showConfirmButton: false
-                }).then(() => {
-                    window.location.href = 'login.html';
-                });
-            }
-        });
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        loadCurrentUserInfo();
-    });
+      <a href="cart.html">
+        Cart
+      </a>
+      <a href="transaction.html">
+        History
+      </a>
+      <a href="account.html" aria-current="page">
+        Profile
+      </a>
+    </nav>
+    <script src="offline.js">
     </script>
-
-    <script>
-        const networkStatus = document.getElementById('networkStatus');
-        const networkStatusText = document.getElementById('networkStatusText');
-        let isActuallyOnline = navigator.onLine;
-        let networkCheckInterval = null;
-        let hasShownPrompt = false;
-
-        async function checkRealNetworkStatus() {
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
-                
-                await fetch('https://www.google.com/favicon.ico', {
-                    method: 'HEAD',
-                    mode: 'no-cors',
-                    cache: 'no-store',
-                    signal: controller.signal
-                });
-                
-                clearTimeout(timeoutId);
-                return true;
-            } catch (error) {
-                return false;
-            }
-        }
-
-        async function updateNetworkStatusWithCheck() {
-            const actuallyOnline = await checkRealNetworkStatus();
-            
-            if (actuallyOnline !== isActuallyOnline) {
-                const previousStatus = isActuallyOnline;
-                isActuallyOnline = actuallyOnline;
-                
-                if (actuallyOnline && !previousStatus && !hasShownPrompt) {
-                    hasShownPrompt = true;
-                    showOnlinePrompt();
-                    setTimeout(() => { hasShownPrompt = false; }, 2000);
-                } else if (!actuallyOnline && previousStatus) {
-                    showOfflineNotification();
-                }
-            }
-                networkStatus.className = 'network-status offline';
-                networkStatusText.textContent = 'Offline Mode';
-        }
-
-        function showOnlinePrompt() {
-            Swal.fire({
-                icon: 'success',
-                title: 'Connection Restored',
-                html: `
-                    <p style="font-size: 16px; margin-bottom: 20px;">
-                        Your internet connection has been restored.
-                    </p>
-                    <p style="font-size: 14px; color: #666;">
-                        Would you like to go online or continue in offline mode?
-                    </p>
-                `,
-                showDenyButton: true,
-                showCancelButton: false,
-                confirmButtonText: '<i class="bi bi-wifi"></i> Go Online',
-                denyButtonText: '<i class="bi bi-wifi-off"></i> Stay Offline',
-                confirmButtonColor: '#2ecc71',
-                denyButtonColor: '#ff4757',
-                allowOutsideClick: false,
-                allowEscapeKey: false
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    redirectToOnline();
-                } else if (result.isDenied) {
-                    Swal.fire({
-                        icon: 'info',
-                        title: 'Staying Offline',
-                        text: 'You will continue using offline mode.',
-                        timer: 2000,
-                        showConfirmButton: false
-                    });
-                }
-            });
-        }
-
-        function showOfflineNotification() {
-            Swal.fire({
-                icon: 'warning',
-                title: 'Connection Lost',
-                html: `
-                    <p style="font-size: 16px; margin-bottom: 15px;">
-                        Your internet connection has been lost.
-                    </p>
-                    <p style="font-size: 14px; color: #666;">
-                        You are now in offline mode. The app will notify you when your connection is restored.
-                    </p>
-                `,
-                confirmButtonText: 'OK',
-                confirmButtonColor: '#5BC2E7'
-            });
-        }
-
-        function redirectToOnline() {
-            Swal.fire({
-                icon: 'success',
-                title: 'Switching to Online Mode',
-                text: 'Redirecting to online version...',
-                timer: 1500,
-                showConfirmButton: false,
-                allowOutsideClick: false,
-                didOpen: () => {
-                    Swal.showLoading();
-                }
-            }).then(() => {
-                const basePath = window.location.pathname.includes('/crms-risev2/public') ? '/crms-risev2/public' : '';
-                const currentUserId = localStorage.getItem('current_user_id');
-                const offlineUser = localStorage.getItem('offlineUser');
-                
-                if (currentUserId || offlineUser) {
-                    window.location.href = basePath + '/account';
-                } else {
-                    window.location.href = basePath + '/login';
-                }
-            });
-        }
-
-        async function toggleNetworkMode() {
-            const actuallyOnline = await checkRealNetworkStatus();
-            
-            if (!actuallyOnline) {
-                Swal.fire({
-                    icon: 'warning',
-                    title: 'No Internet Connection',
-                    html: `
-                        <div style="text-align: center; padding: 15px;">
-                            <p style="font-size: 16px; margin-bottom: 20px;">
-                                📵 You are currently offline
-                            </p>
-                            <p style="font-size: 14px; color: #666; margin-bottom: 15px;">
-                                To go online, please:
-                            </p>
-                            <ul style="text-align: left; font-size: 14px; color: #666; margin: 0 auto; max-width: 250px;">
-                                <li>Turn on WiFi, or</li>
-                                <li>Enable mobile data</li>
-                            </ul>
-                            <p style="font-size: 13px; color: #999; margin-top: 20px;">
-                                The app will automatically detect when your connection is restored.
-                            </p>
-                        </div>
-                    `,
-                    confirmButtonText: 'OK',
-                    confirmButtonColor: '#5BC2E7'
-                });
-                return;
-            }
-            
-            Swal.fire({
-                title: 'Switch to Online Mode?',
-                html: `
-                    <div style="text-align: center; padding: 15px;">
-                        <p style="font-size: 16px; margin-bottom: 15px;">
-                            🟢 <strong>Internet Connected</strong>
-                        </p>
-                        <p style="font-size: 14px; color: #666; margin-bottom: 20px;">
-                            You have an active internet connection. Would you like to switch to the online version?
-                        </p>
-                        <div style="background: #f8f9fa; padding: 12px; border-radius: 8px; font-size: 13px; color: #666;">
-                            <i class="bi bi-info-circle"></i> Online mode provides real-time sync and additional features
-                        </div>
-                    </div>
-                `,
-                icon: 'question',
-                showDenyButton: true,
-                showCancelButton: false,
-                confirmButtonText: '<i class="bi bi-wifi"></i> Go Online',
-                denyButtonText: '<i class="bi bi-wifi-off"></i> Stay Offline',
-                confirmButtonColor: '#2ecc71',
-                denyButtonColor: '#6c757d'
-            }).then((result) => {
-                if (result.isConfirmed) {
-                    redirectToOnline();
-                } else if (result.isDenied) {
-                    Swal.fire({
-                        icon: 'info',
-                        title: 'Staying Offline',
-                        text: 'You will continue using offline mode.',
-                        timer: 2000,
-                        showConfirmButton: false
-                    });
-                }
-            });
-        }
-
-        networkCheckInterval = setInterval(updateNetworkStatusWithCheck, 3000);
-        updateNetworkStatusWithCheck();
-
-        window.addEventListener('beforeunload', () => {
-            if (networkCheckInterval) {
-                clearInterval(networkCheckInterval);
-            }
-        });
+    <script src="auth.js"></script>
+    <script src="data.js">
     </script>
-</body>
+    <script src="workspace.js">
+    </script>
+  </body>
 </html>
