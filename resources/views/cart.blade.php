@@ -59,16 +59,24 @@
     </div>
     <div id="ad-transaction-section" class="client-section" style="display:none;">
         <div class="client-content">
+            <fieldset class="supplier-type-options" aria-describedby="order-supplier-type-help">
+                <legend>Order from</legend>
+                <div class="supplier-type-choices">
+                    <label><input type="radio" name="order_supplier_type" id="orderSupplierAD" value="area_distributor" checked> <span>Area Distributor (AD)</span></label>
+                    <label><input type="radio" name="order_supplier_type" id="orderSupplierMega" value="mega_dealer"> <span>Mega Dealer</span></label>
+                </div>
+                <p id="order-supplier-type-help" role="status">Choose a supplier type, then select a supplier in your area.</p>
+            </fieldset>
             <div class="assigned-ads-card d-flex align-items-center">
                 <div class="ads-icon d-flex align-items-center justify-content-center flex-shrink-0">
                     <i class="bi bi-magic"></i>
                 </div>
 
                 <div class="client-info flex-grow-1">
-                    <div class="client-label">Auto Assigned Area Distributor </div>
+                    <div class="client-label">Order supplier</div>
                     
                     <div class="client-name" id="assigned-ad-name">
-                        Detecting AD...
+                        Finding suppliers...
                     </div>
 
                     {{-- <div class="client-details" id="assigned-ad-details"
@@ -118,7 +126,7 @@
                                 </div>
 
                                 <div class="pickup-subtitle">
-                                    Please pick up your order at the assigned Area Distributor location.
+                                    Please pick up your order at the selected supplier location.
                                 </div>
 
                                 <div class="pickup-address" id="pickup-address-text">
@@ -192,7 +200,7 @@
     <div id="adModal" class="modal-overlays">
         <div class="modal-contents">
             <div class="modal-headers d-flex justify-content-between align-items-center">
-                <span class="modal-titles">Area Distributor</span>
+                <span class="modal-titles">Select supplier</span>
                 <button class="modal-close" onclick="closeADModal()">&times;</button>
             </div>
             <div class="modal-body">
@@ -202,10 +210,10 @@
                     <option value="">Select an AD</option>
                     @if(isset($availableADs))
                         @foreach($availableADs as $ad)
-                            <option value="{{ $ad->id }}" 
-                                data-name="{{ $ad->name }}"
-                                data-area="{{ $ad->area ?? '' }}">
-                                {{ $ad->name }} 
+                            <option value="{{ data_get($ad, 'id') }}"
+                                data-name="{{ data_get($ad, 'name') }}"
+                                data-area="{{ data_get($ad, 'area', '') }}">
+                                {{ data_get($ad, 'name') }}
                             </option>
                         @endforeach
                     @endif
@@ -359,6 +367,15 @@
 
 @section('css')
     <style>    
+    .supplier-type-options { margin: 0 0 14px; padding: 14px; border: 1px solid #dce7ef; border-radius: 14px; background: #fff; min-width: 0; }
+    .supplier-type-options legend { float: none; width: auto; padding: 0 6px; margin: 0; font-size: 13px; font-weight: 700; }
+    .supplier-type-choices { display: flex; flex-wrap: wrap; gap: 10px; }
+    .supplier-type-choices label { display: flex; align-items: center; gap: 8px; flex: 1 1 180px; min-height: 48px; padding: 10px 14px; border: 1px solid #cfdeea; border-radius: 10px; cursor: pointer; font-size: 13px; }
+    .supplier-type-choices label:has(input:checked) { border-color: #249bca; background: #edf9fe; color: #096d98; font-weight: 700; }
+    .supplier-type-choices label:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+    .supplier-type-choices input { accent-color: #168bb8; }
+    .supplier-type-choices input:focus-visible { outline: 3px solid #ffba55; outline-offset: 3px; }
+    .supplier-type-options p { margin: 9px 0 0; font-size: 12px; line-height: 1.5; color: #62788a; }
     .content-area-fix{
         margin-top: -80px;
     }
@@ -1381,24 +1398,22 @@
             }
             
             return this.filteredOptions.map(option => `
-                <div class="dropdown-option" data-id="${option.id}">
-                    <!-- <div class="option-name">${option.name}</div>
-                    <div class="option-details">${option.serial ? option.serial + ' • ' : ''}${option.number || option.area || ''}</div> -->
-
-                    <div class="option-name">${option.name}</div>
+                <div class="dropdown-option" data-id="${escapeOrderSupplierText(option.id)}">
+                    <div class="option-name">${escapeOrderSupplierText(option.name)}</div>
                     <div class="option-details">
-                        ${option.maskedSerial ? option.maskedSerial + ' • ' : ''}
-                        ${option.maskedNumber || (option.isGuest ? 'No points awarded' : '')}
+                        ${option.supplierLabel ? escapeOrderSupplierText(option.supplierLabel) : ''}
+                        ${option.maskedSerial ? escapeOrderSupplierText(option.maskedSerial) + ' • ' : ''}
+                        ${escapeOrderSupplierText(option.maskedNumber || (option.isGuest ? 'No points awarded' : ''))}
                     </div>
                 </div>
             `).join('');
         }
         
         attachEventListeners() {
-            const input = document.getElementById('dropdownInput');
-            const arrow = document.getElementById('dropdownArrow');
-            const optionsContainer = document.getElementById('dropdownOptions');
-            const backdrop = document.getElementById('dropdownBackdrop');
+            const input = this.container.querySelector('#dropdownInput');
+            const arrow = this.container.querySelector('#dropdownArrow');
+            const optionsContainer = this.container.querySelector('#dropdownOptions');
+            const backdrop = this.container.querySelector('#dropdownBackdrop');
             
             input.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -1447,13 +1462,14 @@
         filterOptions(searchTerm) {
             this.filteredOptions = this.options.filter(option => {
                 return option.name.toLowerCase().includes(searchTerm) ||
+                    (option.supplierLabel && option.supplierLabel.toLowerCase().includes(searchTerm)) ||
                     (option.fullName && option.fullName.toLowerCase().includes(searchTerm)) ||
                     (option.serial && option.serial.toLowerCase().includes(searchTerm)) ||
                     (option.number && option.number.toLowerCase().includes(searchTerm)) ||
                     (option.area && option.area.toLowerCase().includes(searchTerm));
             });
             
-            const optionsContainer = document.getElementById('dropdownOptions');
+            const optionsContainer = this.container.querySelector('#dropdownOptions');
             optionsContainer.innerHTML = this.renderOptions();
         }
         
@@ -1462,7 +1478,7 @@
             if (option) {
                 this.selectedOption = option;
                 
-                const input = document.getElementById('dropdownInput');
+                const input = this.container.querySelector('#dropdownInput');
                 input.value = option.name;
                 
                 // Store in localStorage with configurable prefix
@@ -1516,9 +1532,9 @@
         loadSavedSelection() {
             const savedId = localStorage.getItem(`${this.config.storagePrefix}Id`);
             if (savedId) {
-                const savedOption = this.options.find(opt => opt.id == savedId);
+                const savedOption = this.options.find(opt => opt.id == savedId || this.config.storagePrefix === 'selectedAD' && opt.supplier_type === 'area_distributor' && String(opt.supplier_id) === savedId);
                 if (savedOption) {
-                    const input = document.getElementById('dropdownInput');
+                    const input = this.container.querySelector('#dropdownInput');
                     input.value = savedOption.name;
                     this.selectedOption = savedOption;
                 }
@@ -1534,10 +1550,10 @@
         }
         
         openDropdown() {
-            const input = document.getElementById('dropdownInput');
-            const arrow = document.getElementById('dropdownArrow');
-            const optionsContainer = document.getElementById('dropdownOptions');
-            const backdrop = document.getElementById('dropdownBackdrop');
+            const input = this.container.querySelector('#dropdownInput');
+            const arrow = this.container.querySelector('#dropdownArrow');
+            const optionsContainer = this.container.querySelector('#dropdownOptions');
+            const backdrop = this.container.querySelector('#dropdownBackdrop');
             
             input.classList.add('active');
             arrow.classList.add('rotate');
@@ -1555,10 +1571,10 @@
         }
         
         closeDropdown() {
-            const input = document.getElementById('dropdownInput');
-            const arrow = document.getElementById('dropdownArrow');
-            const optionsContainer = document.getElementById('dropdownOptions');
-            const backdrop = document.getElementById('dropdownBackdrop');
+            const input = this.container.querySelector('#dropdownInput');
+            const arrow = this.container.querySelector('#dropdownArrow');
+            const optionsContainer = this.container.querySelector('#dropdownOptions');
+            const backdrop = this.container.querySelector('#dropdownBackdrop');
             
             input.classList.remove('active');
             arrow.classList.remove('rotate');
@@ -1703,19 +1719,23 @@
 
     function updateADSelection() {
     if (!window.adDropdown) {
-        alert('Please select an AD');
+        alert('Please select a supplier');
         return;
     }
 
     const selected = window.adDropdown.getSelectedValue();
 
     if (!selected) {
-        alert('Please select an AD');
+        alert('Please select a supplier');
         return;
     }
 
     // ✅ ONE SINGLE SOURCE OF TRUTH
     window.selectedAD = selected;
+    window.orderSupplierSelectionUnavailable = false;
+    window.orderSupplierType = selected.supplier_type;
+    localStorage.setItem('selectedOrderSupplierType', window.orderSupplierType);
+    localStorage.setItem('selectedAD', JSON.stringify(selected));
 
     localStorage.setItem('selectedADId', selected.id);
     localStorage.setItem('selectedADName', selected.name);
@@ -1739,7 +1759,7 @@
         detectAD();
 
         closeADModal();
-        showSuccessMessage(`AD "${selected.name}" selected`);
+        showSuccessMessage(`${selected.supplier_type === 'mega_dealer' ? 'Mega Dealer' : 'Area Distributor'} "${selected.name}" selected`);
     }
 
     // window.openADSelection = openADSelection;
@@ -2359,7 +2379,12 @@
             const url = new URL("{{ route('products.stocks') }}", window.location.origin);
 
             if (transactionType === 'ad_order' && adId) {
-                url.searchParams.set('ad_id', adId);
+                const supplier = typeof adId === 'object' ? normalizeOrderSupplier(adId)
+                    : normalizeOrderSupplier({ id: adId, supplier_type: String(adId).startsWith('mega_dealer:') ? 'mega_dealer' : 'area_distributor' });
+                if (!supplier) throw new Error('Select an eligible supplier before checking stock.');
+                url.searchParams.set('supplier_type', supplier.supplier_type);
+                url.searchParams.set(supplier.supplier_type === 'mega_dealer' ? 'mega_dealer_id' : 'ad_id', supplier.supplier_id);
+                if (supplier.supplier_type === 'mega_dealer' && supplier.supplier_source === 'dms_prei') url.searchParams.set('supplier_source', 'dms_prei');
             }
 
             const response = await fetch(url.toString(), {
@@ -2436,22 +2461,16 @@
                     if (window.selectedAD && window.selectedAD.id) {
                         adData = window.selectedAD;
                     } else {
-                        const adId = localStorage.getItem('selectedADId');
-                        const adName = localStorage.getItem('selectedADName');
-                        const adArea = localStorage.getItem('selectedADArea');
-                        
-                        if (adId && adName) {
-                            adData = {
-                                id: adId,
-                                name: adName,
-                                area: adArea || ''
-                            };
-                        }
+                        try {
+                            const saved = JSON.parse(localStorage.getItem('selectedAD') || 'null');
+                            const key = saved ? normalizeOrderSupplier(saved)?.id : localStorage.getItem('selectedADId');
+                            adData = window.availableADs.find(supplier => supplier.supplier_type === window.orderSupplierType && (supplier.id === key || supplier.supplier_type === 'area_distributor' && String(supplier.supplier_id) === String(key))) || null;
+                        } catch (_) { adData = null; }
                     }
                     
                     // Validate AD is selected
                     if (!adData || !adData.id) {
-                        alert('Please select an Area Distributor before placing the order.');
+                        alert('Please select an eligible supplier before placing the order.');
                         return;
                     }
                 }
@@ -2562,16 +2581,84 @@
 </script>
 
 <script>
-    window.matchedADs = @json($matchedADs);
-    window.availableADs = @json($availableADs);
+    function escapeOrderSupplierText(value) { return String(value ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character]); }
+    function normalizeOrderSupplier(supplier) {
+        if (!supplier) return null;
+        const type = supplier.supplier_type || 'area_distributor';
+        if (!['area_distributor', 'mega_dealer'].includes(type)) return null;
+        const rawKey = String(supplier.id ?? ''), parts = rawKey.split(':');
+        let keySource = null;
+        if (parts.length > 1) {
+            if (parts[0] !== type || !(/^\d+$/.test(parts[parts.length - 1]))) return null;
+            if (parts.length === 2) keySource = type === 'mega_dealer' ? 'admin_crms' : 'dms_prei';
+            else if (type === 'mega_dealer' && parts.length === 3 && parts[1] === 'dms_prei') keySource = 'dms_prei';
+            else return null;
+        }
+        const declaredSource = supplier.supplier_source;
+        const source = declaredSource === undefined || declaredSource === null || declaredSource === ''
+            ? keySource ?? (type === 'mega_dealer' ? 'admin_crms' : 'dms_prei') : declaredSource;
+        if (!['admin_crms', 'dms_prei'].includes(source) || (keySource && source !== keySource) || (type === 'area_distributor' && source !== 'dms_prei')) return null;
+        const rawId = supplier.supplier_id ?? parts[parts.length - 1];
+        if (!/^\d+$/.test(String(rawId))) return null;
+        const id = Number(rawId);
+        if (!Number.isSafeInteger(id) || id < 1 || (parts.length > 1 && id !== Number(parts[parts.length - 1]))) return null;
+        const key = type === 'mega_dealer' && source === 'dms_prei' ? type + ':dms_prei:' + id : type + ':' + id;
+        return { ...supplier, id: key, supplier_id: id, supplier_type: type,
+            ...(type === 'mega_dealer' ? { supplier_source: source } : {}) };
+    }
+    window.matchedADs = @json($matchedADs).map(normalizeOrderSupplier).filter(Boolean);
+    window.availableADs = @json($availableADs).map(normalizeOrderSupplier).filter(Boolean);
     window.authUserCenter = @json($userCenter);
+    window.canChooseMegaDealer = @json(auth()->user()->isDealerLike() && !auth()->user()->usesMegaDealerPricing() && !auth()->user()->usesSrpPricing());
+    window.availableADs = window.availableADs.filter(supplier => supplier.supplier_type !== 'mega_dealer' || window.canChooseMegaDealer);
+    window.matchedADs = window.matchedADs.filter(supplier => supplier.supplier_type !== 'mega_dealer' || window.canChooseMegaDealer);
     window.selectedAD = null;
+    window.orderSupplierSelectionUnavailable = false;
+    try {
+        const saved = JSON.parse(localStorage.getItem('selectedAD') || 'null');
+        const normalized = saved ? normalizeOrderSupplier(saved) : null;
+        const key = saved ? normalized?.id : localStorage.getItem('selectedADId');
+        window.selectedAD = window.availableADs.find(supplier => supplier.id === key || supplier.supplier_type === 'area_distributor' && String(supplier.supplier_id) === String(key)) || null;
+        window.orderSupplierSelectionUnavailable = Boolean(saved && (!normalized || !window.selectedAD)
+            || String(key || '').startsWith('mega_dealer:') && !window.selectedAD);
+    } catch (_) {}
+    window.orderSupplierType = window.selectedAD?.supplier_type || 'area_distributor';
+    try {
+        const type = localStorage.getItem('selectedOrderSupplierType');
+        if (type === 'area_distributor' || type === 'mega_dealer' && window.canChooseMegaDealer && window.availableADs.some(supplier => supplier.supplier_type === type)) window.orderSupplierType = type;
+    } catch (_) {}
+    if (window.selectedAD?.supplier_type !== window.orderSupplierType) window.selectedAD = null;
+
+    function orderSuppliersForType(type) { return window.availableADs.filter(supplier => supplier.supplier_type === type && (type !== 'mega_dealer' || window.canChooseMegaDealer)); }
+    function renderOrderSupplierTypes() {
+        const ad = document.getElementById('orderSupplierAD'), mega = document.getElementById('orderSupplierMega'), help = document.getElementById('order-supplier-type-help');
+        if (!ad || !mega) return;
+        ad.checked = window.orderSupplierType === 'area_distributor'; mega.checked = window.orderSupplierType === 'mega_dealer';
+        mega.disabled = !window.canChooseMegaDealer || orderSuppliersForType('mega_dealer').length === 0;
+        if (help) help.textContent = !window.canChooseMegaDealer ? 'Mega Dealer ordering is available to Dealer accounts.'
+            : mega.disabled ? 'No eligible Mega Dealer is available in your area. You can order from an assigned AD.'
+            : window.orderSupplierType === 'mega_dealer' ? 'Select a Mega Dealer in your sales area.' : 'Select an Area Distributor assigned to your sales area.';
+    }
+    function changeOrderSupplierType(type) {
+        if (!['area_distributor', 'mega_dealer'].includes(type) || type === 'mega_dealer' && (!window.canChooseMegaDealer || !orderSuppliersForType(type).length)) { renderOrderSupplierTypes(); return; }
+        window.orderSupplierSelectionUnavailable = false;
+        window.orderSupplierType = type;
+        if (window.selectedAD?.supplier_type !== type) {
+            window.selectedAD = null;
+            ['selectedAD', 'selectedADId', 'selectedADName', 'selectedADArea', 'selectedADAreas'].forEach(key => localStorage.removeItem(key));
+        }
+        localStorage.setItem('selectedOrderSupplierType', type); window.adDropdown = null;
+        detectAD();
+        if (document.getElementById('adModal')?.classList.contains('active')) initADDropdown();
+    }
 
     document.addEventListener('DOMContentLoaded', function () {
         initTransactionSystem();
     });
 
     function initTransactionSystem() {
+        renderOrderSupplierTypes();
+        document.querySelectorAll('input[name="order_supplier_type"]').forEach(radio => radio.addEventListener('change', () => changeOrderSupplierType(radio.value)));
         document.querySelectorAll('input[name="transaction_type"]').forEach(radio => {
             radio.addEventListener('change', handleTransactionTypeChange);
         });
@@ -2692,14 +2779,22 @@
 
         // Keep an AD selected manually by the dealer instead of replacing it
         // with the nearest auto-assigned AD.
-        if (window.selectedAD) {
+        renderOrderSupplierTypes();
+        const eligible = orderSuppliersForType(window.orderSupplierType);
+        if (window.orderSupplierSelectionUnavailable) {
+            window.selectedAD = null;
+            adName.textContent = 'Select a supplier';
+            adDetails.textContent = 'Your previous supplier is unavailable. Select an eligible supplier before ordering.';
+            return;
+        }
+        if (window.selectedAD && eligible.some(supplier => supplier.id === window.selectedAD.id)) {
             adName.textContent = window.selectedAD.name;
             renderADDetails(window.selectedAD);
             return;
         }
 
-        if (window.matchedADs.length > 0) {
-            const nearest = window.matchedADs[0];
+        if (eligible.length > 0) {
+            const nearest = eligible[0];
 
             window.selectedAD = nearest;
 
@@ -2709,13 +2804,9 @@
         }
 
         // ✅ FALLBACK
-        if (window.availableADs.length > 0) {
-            adName.textContent = "Select Area Distributor";
-            adDetails.textContent = `${window.availableADs.length} distributors available`;
-        } else {
-            adName.textContent = "No AD Found";
-            adDetails.textContent = "No distributor available";
-        }
+        window.selectedAD = null;
+        adName.textContent = window.orderSupplierType === 'mega_dealer' ? 'No Mega Dealer found' : 'No Area Distributor found';
+        adDetails.textContent = 'No eligible supplier of this type is available in your area.';
     }
 
     // function openADSelection() {
@@ -2731,9 +2822,7 @@
     window.adDropdown = null;
 
     function initADDropdown() {
-        let sourceList = window.matchedADs.length > 0
-            ? window.matchedADs
-            : window.availableADs;
+        const sourceList = orderSuppliersForType(window.orderSupplierType);
 
         // const formatted = sourceList.map(ad => ({
         //     id: ad.id,
@@ -2742,9 +2831,11 @@
         // }));
 
         const formatted = sourceList.map(ad => ({
+            ...ad,
             id: ad.id,
             name: ad.name,
-            areas: ad.areas ? ad.areas.map(area => area.area_name) : [],
+            supplierLabel: ad.supplier_type === 'mega_dealer' ? 'Mega Dealer' : 'Area Distributor',
+            areas: ad.areas ? ad.areas.map(area => typeof area === 'string' ? area : area.area_name) : [],
             distance: ad.distance,
             address: ad.address
         }));
@@ -2759,6 +2850,7 @@
                 detailsFormat: 'Area: {area}'
             }
         );
+        if (window.selectedAD?.supplier_type === window.orderSupplierType) window.adDropdown.selectOption(window.selectedAD.id);
 
         // window.adDropdown = new SearchableDropdown(
         //     'adDropdownContainer',
@@ -2835,6 +2927,7 @@
 
         el.innerHTML = `
             <div style="display:flex; flex-direction:column; gap:8px;">
+                <strong style="font-size:12px;">${ad.supplier_type === 'mega_dealer' ? 'Mega Dealer' : 'Area Distributor'}</strong>
 
                 <!-- Distance Badge -->
                 <div style="
@@ -2887,7 +2980,7 @@
                     gap:5px;
                 ">
                     <i class="bi bi-geo"></i>
-                    <span>${address || 'No address available'}</span>
+                    <span>${escapeOrderSupplierText(address || 'No address available')}</span>
                 </div>
 
                 ${
@@ -2895,7 +2988,7 @@
                     ? `
                     <div style="font-size:11px; color:#777;">
                         <i class="bi bi-map"></i>
-                        ${areas.join(', ')}
+                        ${areas.map(escapeOrderSupplierText).join(', ')}
                     </div>
                     `
                     : ''

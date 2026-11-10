@@ -29,6 +29,12 @@ class User extends Authenticatable
         return $this->hasOne(Dealer::class, 'user_id');
     }
 
+    /** Mega Dealer profile stored with the authenticated users in admin_crms. */
+    public function megaDealer()
+    {
+        return $this->hasOne(MegaDealer::class, 'user_id');
+    }
+
     public function client()
     {
         return $this->hasOne(Client::class, 'user_id');

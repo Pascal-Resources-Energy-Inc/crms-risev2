@@ -68,17 +68,17 @@ $showRoleSelection = $isDirect && !$showLoginDirectly;
                         <path d="M20 21V19C20 17.9391 19.5786 16.9217 18.8284 16.1716C18.0783 15.4214 17.0609 15 16 15H8C6.93913 15 5.92172 15.4214 5.17157 16.1716C4.42143 16.9217 4 17.9391 4 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         <circle cx="12" cy="7" r="4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
-                    Dealer
+                    Mega Dealer / Dealer
                     <span class="selected-indicator" style="display: none;">✓</span>
                 </button>
-                {{-- <button type="button" class="role-button center-chief-btn" data-role="center chief" onclick="selectRole('center chief')">
+                <button type="button" class="role-button center-chief-btn" data-role="center chief" onclick="selectRole('center chief')">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="role-icon">
                         <path d="M12 3L19 6V11C19 15.5 16.1 19.6 12 21C7.9 19.6 5 15.5 5 11V6L12 3Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                         <path d="M9 12L11 14L15 10" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                     </svg>
                     Center Chief
                     <span class="selected-indicator" style="display: none;">✓</span>
-                </button> --}}
+                </button>
                 
                 <button type="button" class="role-button client-btn" data-role="client" onclick="selectRole('client')">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" class="role-icon">
@@ -701,104 +701,101 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     @endif
 
+    // Online sign-in prepares only the successfully authenticated account.
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {
-        loginForm.addEventListener('submit', async function(e) {
-            e.preventDefault();
-            
+        loginForm.addEventListener('submit', async function(event) {
+            event.preventDefault();
             const submitButton = document.getElementById('signinButton');
+            if (submitButton.disabled) return;
             const originalText = submitButton.innerHTML;
-            
+            const formData = new FormData(this);
+            const identifier = String(formData.get('email') || '').trim();
+            const password = String(formData.get('password') || '');
+            const selectedRole = String(formData.get('selected_role') || '');
+            const offlineUrl = @json(asset('offline/home.html'));
             submitButton.disabled = true;
             submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Signing in...';
-            
-            const formData = new FormData(this);
-            
-            try {
-                const response = await fetch(loginForm.action, {
-                    method: 'POST',
-                    body: formData,
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'Accept': 'application/json'
-                    },
-                    credentials: 'same-origin'
-                });
 
-                const contentType = response.headers.get('content-type');
-                const isJson = contentType && contentType.includes('application/json');
-                const result = isJson ? await response.json() : {};
+            async function useSavedLogin() {
+                if (!window.OfflineAuth) throw new Error('Offline sign-in files are not ready. Connect and sign in once to prepare this browser.');
+                const user = await window.OfflineAuth.authenticate(identifier, password, selectedRole);
+                await window.OfflineAuth.startSession(user);
+                document.getElementById('password').value = '';
+                await Swal.fire({ icon: 'success', title: 'Signed in offline', text: 'Your saved account is ready.', timer: 1000, showConfirmButton: false });
+                window.location.href = offlineUrl;
+            }
+
+            try {
+                if (navigator.onLine === false) { await useSavedLogin(); return; }
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), 10000);
+                let response;
+                try {
+                    response = await fetch(loginForm.action, {
+                        method: 'POST', body: formData, signal: controller.signal, credentials: 'same-origin',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+                    });
+                } catch (error) {
+                    if (error && ['TypeError', 'AbortError'].includes(error.name)) { await useSavedLogin(); return; }
+                    throw error;
+                } finally { clearTimeout(timer); }
+                if (response.status === 503) { await useSavedLogin(); return; }
+                const contentType = response.headers.get('content-type') || '';
+                const result = contentType.includes('application/json') ? await response.json() : {};
 
                 if (response.ok && result.success) {
-                    // Keep only non-sensitive identity details for the offline
-                    // pages. Passwords and Laravel session tokens are never
-                    // stored in localStorage.
+                    let offlineReady = false, setupWarning = '';
                     if (result.user && result.user.id) {
-                        const offlineUser = {
-                            id: result.user.id,
-                            name: result.user.name || '',
-                            email: result.user.email || '',
-                            role: result.user.role || '',
-                            loginTime: new Date().toISOString()
-                        };
-
-                        localStorage.setItem('current_user_id', String(offlineUser.id));
-                        localStorage.setItem('current_user_role', offlineUser.role);
-                        localStorage.setItem('current_user_name', offlineUser.name);
-                        localStorage.setItem('current_user_email', offlineUser.email);
-                        localStorage.setItem('offlineUser', JSON.stringify(offlineUser));
+                        window.OfflineDataConfig = window.OfflineDataConfig || { headless: true };
+                        window.OfflineDataConfig.user = result.user;
+                        try {
+                            if (!window.OfflineAuth) throw new Error('Offline sign-in files have not loaded. Refresh while connected and sign in again.');
+                            await window.OfflineAuth.startSession(result.user);
+                            if (result.offline_login === null) {
+                                await window.OfflineAuth.forget(result.user.id);
+                            } else if (result.offline_login) {
+                                submitButton.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Preparing offline sign-in...';
+                                if (!window.OfflineData) throw new Error('Offline account files have not loaded. Refresh while connected and sign in again.');
+                                const [snapshot] = await Promise.all([window.OfflineData.refresh(), window.OfflineData.refreshAssets()]);
+                                const grant = snapshot && snapshot.offline_login;
+                                if (!grant || grant.credential_version !== result.offline_login.credential_version || Number(grant.user.id) !== Number(result.user.id)) {
+                                    throw new Error('Account credentials changed during setup. Sign in again to prepare offline access.');
+                                }
+                                const enrollment = await window.OfflineAuth.enroll(grant, password, identifier);
+                                await window.OfflineAuth.startSession(enrollment.user);
+                                offlineReady = true;
+                            } else throw new Error('This server has not prepared offline sign-in yet. Refresh while connected and sign in again.');
+                        } catch (error) { setupWarning = error.message || 'Offline setup did not finish. Stay connected and sign in again before using this account offline.'; }
                     }
-
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Login Successful!',
-                        text: 'Welcome back!',
-                        timer: 1500,
-                        showConfirmButton: false,
-                        confirmButtonColor: '#5DADE2'
-                    }).then(() => {
-                        window.location.href = result.redirect || '{{ route("home") }}';
+                    document.getElementById('password').value = '';
+                    const status = document.getElementById('offlineSetupStatus');
+                    if (status && offlineReady) status.textContent = 'Offline sign-in and account data are ready on this device.';
+                    await Swal.fire({
+                        icon: setupWarning ? 'warning' : 'success', title: 'Login Successful!',
+                        text: setupWarning ? 'Signed in online. ' + setupWarning : offlineReady ? 'Offline sign-in and your account data are ready on this device.' : 'Welcome back!',
+                        timer: setupWarning ? undefined : 1500, showConfirmButton: !!setupWarning,
+                        confirmButtonText: 'Continue online', confirmButtonColor: '#5DADE2'
                     });
+                    window.location.href = result.redirect || '{{ route("home") }}';
                     return;
                 }
-
                 if (response.status === 419) {
-                    Swal.fire({
-                        icon: 'error',
-                        title: 'Session Expired',
-                        text: 'Please refresh the page and try again.',
-                        confirmButtonColor: '#5DADE2'
-                    });
+                    await Swal.fire({ icon: 'error', title: 'Session Expired', text: 'Please refresh the page and try again.', confirmButtonColor: '#5DADE2' });
                     return;
                 }
-
-                let errorMessage = result.message || 'Invalid credentials. Please check your email/phone and password.';
-                if (result.errors) {
-                    const firstError = Object.values(result.errors).flat()[0];
-                    errorMessage = firstError || errorMessage;
-                }
-
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Login Failed',
-                    text: errorMessage,
-                    confirmButtonColor: '#5DADE2'
-                });
+                const firstError = result.errors && Object.values(result.errors).flat()[0];
+                await Swal.fire({ icon: 'error', title: 'Login Failed', text: firstError || result.message || 'Invalid credentials. Please check your email/phone and password.', confirmButtonColor: '#5DADE2' });
             } catch (error) {
-                console.error('Login error:', error);
-                
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Connection Error',
-                    text: 'Unable to connect to the server. Please check your internet connection.',
-                    confirmButtonColor: '#5DADE2'
-                });
+                await Swal.fire({ icon: 'error', title: 'Login Failed', text: error.message || 'Unable to sign in. Connect and prepare this account for offline access.', confirmButtonColor: '#5DADE2' });
             } finally {
+                formData.delete('password');
                 submitButton.disabled = false;
                 submitButton.innerHTML = originalText;
             }
         });
     }
+    // End online sign-in preparation.
 });
 
 function showRoleSelection() {

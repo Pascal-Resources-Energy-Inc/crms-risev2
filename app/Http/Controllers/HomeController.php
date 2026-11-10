@@ -16,6 +16,8 @@ use App\RedeemedHistory;
 use Illuminate\Support\Facades\Schema;
 use Mail;
 use App\Mail\OrderCompletedMail;
+use App\Support\MegaDealerOrderService;
+use App\Support\OfflinePortalContext;
 
 class HomeController extends Controller
 {
@@ -111,7 +113,7 @@ class HomeController extends Controller
                 })
                 ->latest()
                 ->get();
-            $orders_raw = OrderDetail::where('dealer_id', $userId)
+            $orders_raw = OrderDetail::with(['ad.areas', 'megaDealer'])->where('dealer_id', $userId)
                 ->latest()
                 ->get();
             // dd($userId); 
@@ -145,7 +147,9 @@ class HomeController extends Controller
             // })->values();
             $ad_transactions = $orders_raw
                 ->groupBy(function ($item) {
-                    return $item->ad_id . '_' . $item->created_at->format('Y-m-d H:i:s');
+                    // Mega Dealer fulfilment acts on one PRORD record at a time.
+                    if ($item->mega_dealer_id) return 'mega_dealer:' . $item->supplier_source . ':' . $item->mega_dealer_id . '_order_' . $item->id;
+                    return 'area_distributor:' . $item->ad_id . '_' . $item->status . '_' . $item->created_at->format('Y-m-d H:i:s');
                 })
                 ->map(function ($group) {
 
@@ -153,7 +157,10 @@ class HomeController extends Controller
 
                     return [
                         'id' => $first->id, 
-                        'ad' => $first->ad,
+                        'transaction_id' => $first->transaction_id,
+                        'ad' => $first->supplier,
+                        'supplier_type' => $first->supplier_type,
+                        'supplier_source' => $first->supplier_source,
                         'created_at' => $first->created_at,
                         'status' => $first->status,
                         'ad_address' => $first->ad_address,
@@ -635,7 +642,9 @@ class HomeController extends Controller
     public function markCompleted(Request $request, $id)
     {
         try {
-            $remarks = trim((string) $request->input('remarks', ''));
+            $remarks = $request->input('remarks', '');
+            if (!is_string($remarks)) return response()->json(['success' => false, 'message' => 'Enter remarks as text.'], 422);
+            $remarks = trim($remarks);
 
             if ($remarks === '') {
                 return response()->json([
@@ -660,6 +669,18 @@ class HomeController extends Controller
                     'message' => 'Order not found'
                 ], 404);
 
+            }
+
+            if ($order->mega_dealer_id) {
+                [$order, $changed] = (new MegaDealerOrderService(new OfflinePortalContext))->complete($id, auth()->user(), $remarks);
+                $completedPendingCount = $changed ? $this->completePendingClientTransactionsForOrder($order) : 0;
+                return response()->json(['success' => true, 'status' => $order->status, 'message' => !$changed ? 'This order is already completed.'
+                    : ($completedPendingCount ? 'Order completed and pending client sales updated.' : 'Order completed successfully.')]);
+            }
+
+            if ((int) $order->dealer_id !== (int) auth()->id() && (int) optional($order->ad)->user_id !== (int) auth()->id() &&
+                strtolower((string) auth()->user()->role) !== 'admin') {
+                return response()->json(['success' => false, 'message' => 'This order is not assigned to your account.'], 403);
             }
 
             // UPDATE STATUS
@@ -691,15 +712,13 @@ class HomeController extends Controller
                     : 'Order marked as completed.'
             ]);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json(['success' => false, 'message' => collect($e->errors())->flatten()->first(), 'errors' => $e->errors()], 422);
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], $e->getStatusCode());
         } catch (\Exception $e) {
-
             \Log::error($e);
-
-            return response()->json([
-                'success' => false,
-                'message' => $e->getMessage()
-            ], 500);
-
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
         }
     }
 
@@ -724,6 +743,10 @@ class HomeController extends Controller
                 ], 404);
             }
 
+            if ((int) $order->dealer_id !== (int) auth()->id() && strtolower((string) auth()->user()->role) !== 'admin') {
+                return response()->json(['success' => false, 'message' => 'Only the buyer can cancel this order.'], 403);
+            }
+
             if ($order->status !== 'Pending') {
                 return response()->json([
                     'success' => false,
@@ -743,6 +766,12 @@ class HomeController extends Controller
             $cancelledCount = DB::transaction(function () use ($order, $remarks) {
                 $orders = OrderDetail::where('dealer_id', $order->dealer_id)
                     ->where('ad_id', $order->ad_id)
+                    ->when($order->mega_dealer_id, function ($query) use ($order) {
+                        $query->where('id', $order->id);
+                    })
+                    ->when(Schema::hasColumn('order_details', 'mega_dealer_id'), function ($query) use ($order) {
+                        $query->where('mega_dealer_id', $order->mega_dealer_id);
+                    })
                     ->where('created_at', $order->created_at)
                     ->where('status', 'Pending')
                     ->lockForUpdate()
@@ -767,6 +796,11 @@ class HomeController extends Controller
                 return $orders->count();
             });
 
+            if ($cancelledCount === 0) return response()->json([
+                'success' => false,
+                'message' => 'The order status changed before cancellation. Refresh the page to see its current status.'
+            ], 409);
+
             return response()->json([
                 'success' => true,
                 'message' => $cancelledCount > 1
@@ -787,6 +821,14 @@ class HomeController extends Controller
     }
 
     private function completePendingClientTransactionsForOrder(OrderDetail $order)
+    {
+        return DB::transaction(function () use ($order) {
+            DB::table('users')->where('id', $order->dealer_id)->lockForUpdate()->first();
+            return $this->completePendingClientTransactionsWithStockLock($order);
+        }, 3);
+    }
+
+    private function completePendingClientTransactionsWithStockLock(OrderDetail $order)
     {
         if (!Schema::hasColumn('transaction_details', 'status')) {
             return 0;
@@ -820,6 +862,7 @@ class HomeController extends Controller
             })
             ->orderBy('created_at')
             ->orderBy('id')
+            ->lockForUpdate()
             ->get();
 
         foreach ($pendingTransactions as $transaction) {
@@ -870,7 +913,17 @@ class HomeController extends Controller
             })
             ->sum('qty');
 
-        return max(0, (int) $completedOrderQty - (int) $completedSalesQty);
+        $outgoingQty = 0;
+        if (Schema::hasColumn('order_details', 'mega_dealer_id') && Schema::hasTable('mega_dealers')) {
+            $supplierId = DB::table('mega_dealers')->where('user_id', $order->dealer_id)->value('id');
+            if ($supplierId) $outgoingQty = OrderDetail::where('mega_dealer_id', $supplierId)->localMegaDealerSource()->whereIn('status', ['For Verification', 'Completed'])
+                ->where(function ($query) use ($productNames, $productSkus) {
+                    $query->whereIn('item', $productNames);
+                    if (Schema::hasColumn('order_details', 'sku') && !empty($productSkus)) $query->orWhereIn('sku', $productSkus);
+                })->sum('qty');
+        }
+
+        return max(0, (int) $completedOrderQty - (int) $completedSalesQty - (int) $outgoingQty);
     }
 
 }

@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>New AD Order</title>
+    <title>New Order</title>
 </head>
 <body style="font-family: Arial; background:#f5f5f5; padding:20px;">
 
@@ -10,7 +10,7 @@
         
         <h2 style="color:#28a745;">New Order</h2>
 
-        <p>Hello <strong>{{ $ad->user->name ?? 'Area Distributor' }}</strong>,</p>
+        <p>Hello <strong>{{ $ad->user->name ?? 'Supplier' }}</strong>,</p>
 
         <p>You have received a new order.</p>
 

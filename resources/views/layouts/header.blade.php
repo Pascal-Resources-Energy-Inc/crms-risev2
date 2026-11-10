@@ -40,6 +40,13 @@
             background: linear-gradient(to right, #c3c3c3, #c3c3c3) !important;
         }
     </style>
+    @auth
+    <link rel="stylesheet" href="{{ asset('offline/data.css') }}">
+    @php($offlineIdentity = ['id' => auth()->id(), 'name' => auth()->user()->name, 'email' => auth()->user()->email, 'role' => auth()->user()->role])
+    <script>window.OfflineDataConfig = { user: @json($offlineIdentity) };</script>
+    <script defer src="{{ asset('offline/auth.js') }}"></script>
+    <script defer src="{{ asset('offline/data.js') }}"></script>
+    @endauth
     @yield('css')
 
     <style>
@@ -1129,7 +1136,7 @@
 
     window.addEventListener('offline', () => {
         console.log('📵 You are offline');
-        document.body.classList.add('offline-mode');
+        if (document.body) document.body.classList.add('offline-mode');
         showOfflineChoiceDialog();
     });
 
@@ -1182,19 +1189,7 @@
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-        Promise.all([
-            fetch('https://www.google.com/generate_204', {
-                method: 'HEAD',
-                mode: 'no-cors',
-                cache: 'no-store',
-                signal: controller.signal
-            }),
-            fetch('https://1.1.1.1/cdn-cgi/trace', {
-                method: 'GET',
-                cache: 'no-store',
-                signal: controller.signal
-            })
-        ])
+        Promise.all([fetch(@json(asset('manifest.json')), { method: 'HEAD', cache: 'no-store', signal: controller.signal })])
             .then(responses => {
                 clearTimeout(timeoutId);
                 
@@ -1247,16 +1242,8 @@
     }
 
     function redirectToOfflineMode() {
-        const getBasePath = () => {
-            const path = window.location.pathname;
-            if (path.includes('/crms-risev2/public')) {
-                return '/crms-risev2/public';
-            }
-            return '';
-        };
-        
-        const offlinePath = `${getBasePath()}/offline/login.html`;
-        
+        const offlinePath = @json(asset('offline/home.html'));
+
         Swal.fire({
             icon: 'info',
             title: 'Switching to Offline Mode',

@@ -570,22 +570,14 @@
             }
         }
         
-        // Get AD data - priority from orderData.ad, fallback to localStorage
+        // Preserve supplier identity across the cart and confirmation pages.
         if (orderData.ad && orderData.ad.id) {
-            adData = orderData.ad;
+            adData = normalizeConfirmationSupplier(orderData.ad);
         } else {
-            // Try to get from localStorage (set by cart.blade.php)
-            const adId = localStorage.getItem('selectedADId');
-            const adName = localStorage.getItem('selectedADName');
-            const adArea = localStorage.getItem('selectedADArea');
-            
-            if (adId && adName) {
-                adData = {
-                    id: adId,
-                    name: adName,
-                    area: adArea || ''
-                };
-            }
+            const saved = JSON.parse(localStorage.getItem('selectedAD') || 'null');
+            adData = normalizeConfirmationSupplier(saved || {
+                id: localStorage.getItem('selectedADId'), name: localStorage.getItem('selectedADName'), area: localStorage.getItem('selectedADArea') || ''
+            });
         }
         
         console.log('AD Data:', adData);
@@ -642,6 +634,30 @@
     //         });
     //     }
     // }
+    function normalizeConfirmationSupplier(supplier) {
+        if (!supplier) return null;
+        const type = supplier.supplier_type || 'area_distributor';
+        if (!['area_distributor', 'mega_dealer'].includes(type)) return null;
+        const rawKey = String(supplier.id ?? ''), parts = rawKey.split(':');
+        let keySource = null;
+        if (parts.length > 1) {
+            if (parts[0] !== type || !(/^\d+$/.test(parts[parts.length - 1]))) return null;
+            if (parts.length === 2) keySource = type === 'mega_dealer' ? 'admin_crms' : 'dms_prei';
+            else if (type === 'mega_dealer' && parts.length === 3 && parts[1] === 'dms_prei') keySource = 'dms_prei';
+            else return null;
+        }
+        const declaredSource = supplier.supplier_source;
+        const source = declaredSource === undefined || declaredSource === null || declaredSource === ''
+            ? keySource ?? (type === 'mega_dealer' ? 'admin_crms' : 'dms_prei') : declaredSource;
+        if (!['admin_crms', 'dms_prei'].includes(source) || (keySource && source !== keySource) || (type === 'area_distributor' && source !== 'dms_prei')) return null;
+        const rawId = supplier.supplier_id ?? parts[parts.length - 1];
+        if (!/^\d+$/.test(String(rawId))) return null;
+        const id = Number(rawId);
+        if (!Number.isSafeInteger(id) || id < 1 || (parts.length > 1 && id !== Number(parts[parts.length - 1]))) return null;
+        const key = type === 'mega_dealer' && source === 'dms_prei' ? type + ':dms_prei:' + id : type + ':' + id;
+        return { ...supplier, id: key, supplier_id: id, supplier_type: type,
+            ...(type === 'mega_dealer' ? { supplier_source: source } : {}) };
+    }
     function displayCustomerDetails() {
         const nameDisplay = document.getElementById('customer-name-display');
         const detailsDisplay = document.getElementById('customer-details-display');
@@ -656,12 +672,12 @@
         if (orderData.transaction_type === 'ad_order') {
 
             if (!adData || !adData.id) {
-                nameDisplay.textContent = 'No Area Distributor Selected';
+                nameDisplay.textContent = 'No supplier selected';
                 detailsDisplay.textContent = '';
 
                 Swal.fire({
-                    title: 'Missing AD',
-                    text: 'Please select Area Distributor again.',
+                    title: 'Missing supplier',
+                    text: 'Please select an eligible supplier again.',
                     icon: 'warning'
                 }).then(() => history.back());
 
@@ -670,10 +686,10 @@
             
             nameDisplay.textContent = adData.name;
 
-            let details = [];
+            let details = [adData.supplier_type === 'mega_dealer' ? 'Mega Dealer' : 'Area Distributor'];
             if (adData.areas && adData.areas.length > 0) {
               const areaNames = adData.areas
-                  .map(area => area.area_name)
+                  .map(area => typeof area === 'string' ? area : area.area_name)
                   .filter(Boolean);
 
               details.push(`Areas: ${areaNames.join(', ')}`);
@@ -1016,14 +1032,16 @@
     async function saveTransactionsToDatabase() {
       try {
           const isADOrder = orderData.transaction_type === 'ad_order';
+          if (isADOrder) adData = normalizeConfirmationSupplier(adData);
 
           const customerId = !isADOrder
               ? (customerData?.id || localStorage.getItem('selectedCustomerId'))
               : null;
 
           const adId = isADOrder
-              ? (adData?.id)
+              ? (adData?.supplier_id)
               : null;
+          if (isADOrder && (!adData || !adId)) throw new Error('Select an eligible supplier before placing your order.');
 
           console.log('Customer ID:', customerId);
           console.log('AD ID:', adId);
@@ -1076,7 +1094,9 @@
                   // }
 
                   if (isADOrder) {
-                      formData.append('area_distributor_id', adId);
+                      formData.append('supplier_type', adData.supplier_type || 'area_distributor');
+                      formData.append(adData.supplier_type === 'mega_dealer' ? 'mega_dealer_id' : 'area_distributor_id', adId);
+                      if (adData.supplier_type === 'mega_dealer' && adData.supplier_source === 'dms_prei') formData.append('supplier_source', 'dms_prei');
                   } else {
                       formData.append('customer_id', customerId);
                   }
@@ -1241,13 +1261,8 @@
                 
                 Swal.fire({
                     title: 'Order Completed Successfully!',
-                    html: `
-                        <p>Order has been placed for <strong>
-                          ${orderData.transaction_type === 'ad_order'
-                              ? (adData?.name || 'Area Distributor')
-                              : (customerData?.name || 'Customer')}
-                          </strong></p>
-                    `,
+                    text: 'Order has been placed for ' + (orderData.transaction_type === 'ad_order'
+                        ? (adData?.name || 'Supplier') : (customerData?.name || 'Customer')),
                     icon: 'success',
                     timer: 2500,
                     showConfirmButton: false,

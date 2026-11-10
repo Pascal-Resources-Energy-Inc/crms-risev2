@@ -8,6 +8,8 @@ class AreaDistributor extends Model
 {
     protected $connection = 'dms';
 
+    protected $table = 'area_distributors';
+
     public function areas()
     {
         return $this->hasMany(AreaAd::class, 'ad_id');
@@ -15,6 +17,6 @@ class AreaDistributor extends Model
 
     public function user()
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(DmsUser::class, 'user_id');
     }
 }

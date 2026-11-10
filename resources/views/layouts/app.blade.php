@@ -17,7 +17,9 @@
     
     <!-- PWA Manifest - CRITICAL: Must be present -->
     <link rel="manifest" href="{{ asset('manifest.json') }}">
-    <link rel="manifest" href="../public/manifest.json">
+    <script>window.OfflineDataConfig = window.OfflineDataConfig || {}; window.OfflineDataConfig.headless = true;</script>
+    <script defer src="{{ asset('offline/auth.js') }}"></script>
+    <script defer src="{{ asset('offline/data.js') }}"></script>
     
     <!-- PWA Meta Tags -->
     <meta name="theme-color" content="#5DADE2">
@@ -39,13 +41,15 @@
     <!-- App Css-->
     <link href="{{asset('inside_css/assets/css/app.min.css')}}" rel="stylesheet" type="text/css" />
     <!-- custom Css-->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="{{asset('inside_css/assets/libs/sweetalert2/sweetalert2.all.min.js')}}"></script>
     
     <link href="{{asset('inside_css/assets/css/custom.min.css')}}" rel="stylesheet" type="text/css" />
  
     <link href="https://fonts.googleapis.com/css?family=Nunito" rel="stylesheet" type="text/css">
     
     <style>
+        .offline-setup-status{display:flex;flex-wrap:wrap;gap:10px;align-items:center;max-width:760px;margin:16px auto;padding:12px 16px;border:1px solid #cde4ef;border-radius:12px;background:#eff9fc;color:#21445b;font:13px/1.5 Arial,sans-serif;overflow-wrap:anywhere}
+        .offline-setup-status span{flex:1 1 240px;min-width:0}.offline-setup-status button{padding:9px 13px;border:1px solid #1682aa;border-radius:8px;background:#fff;color:#096483;font:inherit;min-height:40px;cursor:pointer}.offline-setup-status [hidden]{display:none}.offline-setup-status button:focus-visible{outline:3px solid #ffb64d;outline-offset:2px}@media(max-width:800px){.offline-setup-status{margin:12px}}
         .loader {
             position: fixed;
             left: 0px;
@@ -367,75 +371,6 @@
     </style>
 </head>
 <body>
-      <div class="pwa-loading-overlay" id="pwaLoadingOverlay">
-        <div class="pwa-loading-content">
-            <img src="{{url('images/logo_nya.png')}}" alt="GazLite Logo" class="pwa-loading-logo">
-            
-            <h1 class="pwa-loading-title">GazLite</h1>
-            <p class="pwa-loading-subtitle">Preparing your experience...</p>
-            
-            <div class="pwa-progress-container">
-                <div class="pwa-progress-bar-bg">
-                    <div class="pwa-progress-bar" id="pwaProgressBar"></div>
-                </div>
-                
-                <div class="pwa-loading-percentage" id="pwaLoadingPercentage">0%</div>
-                <div class="pwa-loading-status" id="pwaLoadingStatus">Initializing...</div>
-                
-                <div class="pwa-loading-tasks">
-                    <div class="pwa-task-item" id="task-sw">
-                        <div class="pwa-task-icon">
-                            <div class="pwa-spinner"></div>
-                        </div>
-                        <span>Loading Service Worker</span>
-                    </div>
-                    
-                    <div class="pwa-task-item" id="task-cache">
-                        <div class="pwa-task-icon">
-                            <div class="pwa-spinner"></div>
-                        </div>
-                        <span>Caching essential files</span>
-                    </div>
-                    
-                    <div class="pwa-task-item" id="task-db">
-                        <div class="pwa-task-icon">
-                            <div class="pwa-spinner"></div>
-                        </div>
-                        <span>Syncing database</span>
-                    </div>
-                    
-                    <div class="pwa-task-item" id="task-assets">
-                        <div class="pwa-task-icon">
-                            <div class="pwa-spinner"></div>
-                        </div>
-                        <span>Loading resources</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-    (function() {
-        const hasCompletedFirstLoad = localStorage.getItem('pwa-first-load-complete');
-        const overlay = document.getElementById('pwaLoadingOverlay');
-        
-        
-        if (hasCompletedFirstLoad === 'true') {
-            if (overlay) {
-                overlay.classList.add('hidden');
-                overlay.style.display = 'none';
-            }
-            document.body.style.overflow = 'auto';
-        } else {
-            if (overlay) {
-                overlay.classList.remove('hidden');
-                overlay.style.display = 'flex';
-                document.body.style.overflow = 'hidden';
-            }
-        }
-    })();
-    </script>
     <div id="loader" style="display:none;" class="loader"></div>
     
     <div class="pwa-install-container" id="pwaInstallPrompt">
@@ -466,6 +401,10 @@
     </div>
   
     @yield('content')
+    <aside class="offline-setup-status" aria-label="Offline availability">
+        <span id="offlineSetupStatus" role="status">Checking offline availability on this device…</span>
+        <button type="button" id="offlineSetupRetry" hidden>Retry offline setup</button>
+    </aside>
 
     <script src="{{asset('inside_css/assets/libs/bootstrap/js/bootstrap.bundle.min.js')}}"></script>
     <script src="{{asset('inside_css/assets/libs/simplebar/simplebar.min.js')}}"></script>
@@ -477,721 +416,78 @@
     <script src="{{asset('inside_css/assets/js/pages/particles.app.js')}}"></script>
     <script src="{{asset('inside_css/assets/js/pages/password-addon.init.js')}}"></script>
 
-<script>
-window.addEventListener('offline', () => {
-    if (navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({ 
-            type: 'CLEAR_ONLINE_CACHE' 
-        });
-    }
-    
-    console.log('📵 Going offline - cleared online cache');
-    
-    setTimeout(() => {
-        const isAuth = localStorage.getItem('current_user_id') || 
-                       localStorage.getItem('offlineUser');
-        
-        if (isAuth) {
-            window.location.href = '/offline/home.html';
-        } else {
-            window.location.href = '/offline/login.html';
-        }
-    }, 1000);
-});
-</script>
-
-    
     <script>
-      class PWALoadingManager {
-    constructor() {
-        this.tasks = {
-            sw: { completed: false, weight: 20 },
-            cache: { completed: false, weight: 20 },
-            db: { completed: false, weight: 30 },
-            assets: { completed: false, weight: 10 }
-        };
-        
-        this.progressBar = document.getElementById('pwaProgressBar');
-        this.percentageText = document.getElementById('pwaLoadingPercentage');
-        this.statusText = document.getElementById('pwaLoadingStatus');
-        this.overlay = document.getElementById('pwaLoadingOverlay');
-        
-        this.shouldShowLoading = false;
-        this.allTasksCompleted = false;
-        this.loadingStartTime = Date.now();
-        this.MINIMUM_LOADING_TIME = 20000;
-    }
-    
-    checkIfLoadingNeeded() {
-        const hasCompletedFirstLoad = localStorage.getItem('pwa-first-load-complete');
-        
-        if (hasCompletedFirstLoad === 'true') {
-            console.log('Skipping loading - first load already completed');
-            this.shouldShowLoading = false;
-            this.overlay.classList.add('hidden');
-            return false;
+    // Offline startup verifies a complete bundle, independent of sign-in and optional downloads.
+    (function () {
+        'use strict';
+        const workerUrl = new URL(@json(asset('sw.js')), window.location.href);
+        const scope = new URL('./', workerUrl).href;
+        let task;
+        function show(message, retry) {
+            const node = document.getElementById('offlineSetupStatus'), button = document.getElementById('offlineSetupRetry');
+            if (node) node.textContent = message;
+            if (button) { button.hidden = !retry; button.disabled = false; }
         }
-        
-        this.shouldShowLoading = true;
-        this.overlay.classList.remove('hidden');
-        document.body.style.overflow = 'hidden';
-        return true;
-    }
-    
-    updateProgress() {
-        if (!this.shouldShowLoading) return;
-        
-        let taskProgress = 0;
-        for (const [key, task] of Object.entries(this.tasks)) {
-            if (task.completed) {
-                taskProgress += task.weight;
-            }
-        }
-        
-        const elapsedTime = Date.now() - this.loadingStartTime;
-        let totalProgress = 0;
-        
-        if (taskProgress >= 80) {
-            const progressFrom80 = 80 + ((elapsedTime / this.MINIMUM_LOADING_TIME) * 20);
-            totalProgress = Math.min(progressFrom80, 100);
-        } else {
-            const timeProgress = Math.min((elapsedTime / 19000) * 20, 20);
-            totalProgress = Math.min(taskProgress + timeProgress, 80);
-        }
-        
-        this.progressBar.style.width = totalProgress + '%';
-        this.percentageText.textContent = Math.round(totalProgress) + '%';
-        
-        const allComplete = Object.values(this.tasks).every(task => task.completed);
-        
-        if (allComplete && !this.allTasksCompleted) {
-            this.allTasksCompleted = true;
-            this.complete();
-        }
-    }
-    
-    completeTask(taskName, message = '') {
-        if (this.tasks[taskName]) {
-            this.tasks[taskName].completed = true;
-            
-            const taskElement = document.getElementById(`task-${taskName}`);
-            if (taskElement) {
-                taskElement.classList.add('completed');
-                taskElement.classList.remove('active');
-                
-                const icon = taskElement.querySelector('.pwa-task-icon');
-                icon.innerHTML = '<span class="pwa-checkmark">✓</span>';
-            }
-            
-            if (message && this.shouldShowLoading) {
-                this.statusText.textContent = message;
-            }
-            
-            console.log(`Task completed: ${taskName} - ${message}`);
-            this.updateProgress();
-        }
-    }
-    
-    setActiveTask(taskName, message = '') {
-        if (!this.shouldShowLoading) return;
-        
-        const taskElement = document.getElementById(`task-${taskName}`);
-        if (taskElement) {
-            taskElement.classList.add('active');
-        }
-        
-        if (message) {
-            this.statusText.textContent = message;
-        }
-    }
-    
-    failTask(taskName, message = '') {
-        console.error(`Task failed: ${taskName} - ${message}`);
-        
-        const taskElement = document.getElementById(`task-${taskName}`);
-        if (taskElement) {
-            taskElement.classList.add('completed');
-            taskElement.classList.remove('active');
-            
-            const icon = taskElement.querySelector('.pwa-task-icon');
-            icon.innerHTML = '<span class="pwa-error-icon">✗</span>';
-        }
-        
-        if (message && this.shouldShowLoading) {
-            this.statusText.textContent = message;
-        }
-        
-        setTimeout(() => {
-            this.completeTask(taskName, 'Completed with warnings');
-        }, 2000);
-    }
-    
-    complete() {
-        const elapsedTime = Date.now() - this.loadingStartTime;
-        const remainingTime = this.MINIMUM_LOADING_TIME - elapsedTime;
-        
-        if (remainingTime > 0) {
-            console.log(`All tasks done, waiting ${Math.round(remainingTime/1000)}s more...`);
-            this.statusText.textContent = 'Finalizing download...';
-            
-            const progressInterval = setInterval(() => {
-                this.updateProgress();
-            }, 100);
-            
-            setTimeout(() => {
-                clearInterval(progressInterval);
-                this.updateProgress();
-                this.finishLoading();
-            }, remainingTime);
-        } else {
-            this.updateProgress();
-            this.finishLoading();
-        }
-    }
-    
-    finishLoading() {
-        if (this.shouldShowLoading) {
-            this.statusText.textContent = 'Ready!';
-            this.progressBar.style.width = '100%';
-            this.percentageText.textContent = '100%';
-        }
-        
-        localStorage.setItem('pwa-first-load-complete', 'true');
-        localStorage.setItem('pwa-last-sync', Date.now().toString());
-        
-        console.log('All tasks completed - App is ready!');
-        
-        setTimeout(() => {
-            this.overlay.classList.add('fade-out');
-            
-            setTimeout(() => {
-                this.overlay.classList.add('hidden');
-                document.body.style.overflow = 'auto';
-            }, 500);
-        }, 500);
-    }
-}
-
-const loadingManager = new PWALoadingManager();
-
-(function initializePWA() {
-    const needsLoading = loadingManager.checkIfLoadingNeeded();
-    
-    if (!needsLoading) {
-        return;
-    }
-    
-    startLoadingTasks();
-    
-    setInterval(() => {
-        loadingManager.updateProgress();
-    }, 100);
-})();
-
-function startLoadingTasks() {
-    loadingManager.setActiveTask('sw', 'Registering Service Worker...');
-    
-    if ('serviceWorker' in navigator) {
-        const getBasePath = () => {
-            const path = window.location.pathname;
-            if (path.includes('/crms-risev2/public')) {
-                return '/crms-risev2/public';
-            }
-            return '';
-        };
-        
-        const BASE_PATH = getBasePath();
-        const swPath = `${BASE_PATH}/sw.js`;
-        const swScope = `${BASE_PATH}/`;
-        
-        fetch(swPath)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`sw.js not found at ${swPath}`);
-                }
-                return navigator.serviceWorker.register(swPath, { scope: swScope });
-            })
-            .then(registration => {
-                console.log('Service Worker registered');
-                
-                if (registration.active) {
-                    loadingManager.completeTask('sw', 'Service Worker active');
-                    loadCacheAndAssets();
-                } else {
-                    const worker = registration.installing || registration.waiting;
-                    if (worker) {
-                        worker.addEventListener('statechange', () => {
-                            if (worker.state === 'activated') {
-                                loadingManager.completeTask('sw', 'Service Worker active');
-                                loadCacheAndAssets();
-                            }
-                        });
-                    }
-                }
-                
-                setInterval(() => {
-                    registration.update();
-                }, 60000);
-            })
-            .catch(error => {
-                console.error('Service Worker failed:', error);
-                loadingManager.failTask('sw', 'Service Worker registration failed');
+        function activeWorker(registration) {
+            const worker = registration.installing || registration.waiting || registration.active;
+            if (!worker) return Promise.reject(new Error('Offline installation has not started. Connect and retry.'));
+            if (worker.state === 'activated') return Promise.resolve(worker);
+            return new Promise((resolve, reject) => {
+                const done = error => {
+                    clearTimeout(timer); worker.removeEventListener('statechange', changed);
+                    if (error) reject(error); else resolve(worker);
+                };
+                const changed = () => {
+                    if (worker.state === 'activated') done();
+                    else if (worker.state === 'redundant') done(new Error('Offline installation did not finish. Keep your connection and retry.'));
+                };
+                const timer = setTimeout(() => done(new Error('Offline setup is still pending. Keep your connection and retry.')), 20000);
+                worker.addEventListener('statechange', changed); changed();
             });
-    } else {
-        loadingManager.completeTask('sw', 'Service Worker not supported');
-        loadCacheAndAssets();
-    }
-    
-    loadingManager.setActiveTask('db', 'Syncing database...');
-    saveAllDataToIndexedDBWithProgress();
-}
-
-function loadCacheAndAssets() {
-    loadingManager.setActiveTask('cache', 'Caching essential files...');
-    
-    const checkCacheReady = async () => {
-        try {
-            const cacheNames = await caches.keys();
-            if (cacheNames.length > 0) {
-                const cache = await caches.open(cacheNames[0]);
-                const keys = await cache.keys();
-                
-                if (keys.length > 5) {
-                    console.log('Cache populated with', keys.length, 'files');
-                    loadingManager.completeTask('cache', 'Cache ready');
-                    loadAssets();
-                    return true;
+        }
+        function ask(worker, type) {
+            return new Promise((resolve, reject) => {
+                const channel = new MessageChannel();
+                const timer = setTimeout(() => { channel.port1.close(); reject(new Error('Offline readiness could not be confirmed. Keep your connection and retry.')); }, type === 'REFRESH_OFFLINE_ASSETS' ? 25000 : 10000);
+                channel.port1.onmessage = event => { clearTimeout(timer); channel.port1.close(); resolve(event.data || {}); };
+                try { worker.postMessage({ type }, [channel.port2]); }
+                catch (error) { clearTimeout(timer); channel.port1.close(); reject(error); }
+            });
+        }
+        function prepare() {
+            if (task) return task;
+            task = (async () => {
+                if (!('serviceWorker' in navigator)) {
+                    show('Offline access needs a supported browser and a secure connection. You can still sign in online.', false); return;
                 }
-            }
-            return false;
-        } catch (err) {
-            console.error('Error checking cache:', err);
-            return false;
+                show('Preparing offline access on this device. Keep this page open while connected…', false);
+                try {
+                    const registration = navigator.onLine === false
+                        ? await navigator.serviceWorker.getRegistration(scope)
+                        : await navigator.serviceWorker.register(workerUrl.href, { scope, updateViaCache: 'none' });
+                    if (!registration) throw new Error('Offline setup is not ready for this address. Connect and retry.');
+                    if (navigator.onLine !== false) { try { await registration.update(); } catch (_) {} }
+                    const worker = await activeWorker(registration);
+                    let state = await ask(worker, 'GET_OFFLINE_STATUS');
+                    if (!state.ready && navigator.onLine !== false) {
+                        const result = await ask(worker, 'REFRESH_OFFLINE_ASSETS');
+                        if (!result.success) throw new Error(result.message || 'Offline files could not be downloaded.');
+                        state = await ask(worker, 'GET_OFFLINE_STATUS');
+                    }
+                    if (!state.ready) throw new Error(state.message || 'Offline setup is incomplete. Connect and retry.');
+                    show('Offline pages are ready on this device. Sign in online to save your account data before disconnecting.', false);
+                } catch (error) { show(error.message || 'Offline setup is not ready. Stay connected and retry.', true); }
+            })().finally(() => { task = null; });
+            return task;
         }
-    };
-    
-    let attempts = 0;
-    const maxAttempts = 20;
-    
-    const pollCache = setInterval(async () => {
-        attempts++;
-        
-        const ready = await checkCacheReady();
-        
-        if (ready) {
-            clearInterval(pollCache);
-        } else if (attempts >= maxAttempts) {
-            clearInterval(pollCache);
-            console.log('Cache check timeout - marking as complete');
-            loadingManager.completeTask('cache', 'Cache ready');
-            loadAssets();
-        } else {
-            console.log(`Caching files... (${attempts}/${maxAttempts}s)`);
-            loadingManager.statusText.textContent = `Caching files... ${attempts}/${maxAttempts}s`;
+        function start() {
+            const button = document.getElementById('offlineSetupRetry');
+            if (button) button.onclick = () => { button.disabled = true; prepare(); };
+            prepare();
         }
-    }, 1000);
-}
-
-function loadAssets() {
-    loadingManager.setActiveTask('assets', 'Loading resources...');
-    
-    if (document.readyState === 'complete') {
-        loadingManager.completeTask('assets', 'Resources loaded');
-    } else {
-        window.addEventListener('load', () => {
-            loadingManager.completeTask('assets', 'Resources loaded');
-        });
-    }
-}
-
-async function saveAllDataToIndexedDBWithProgress() {
-    try {
-        console.log('Starting IndexedDB sync...');
-        
-        await saveUsersToIndexedDB();
-        await saveDealersToIndexedDB();
-        await saveClientsToIndexedDB();
-        await saveTransactionsToIndexedDB();
-        await saveStovesToIndexedDB();
-        await saveItemsToIndexedDB();
-        
-        console.log('IndexedDB sync completed!');
-        loadingManager.completeTask('db', 'Database synchronized');
-    } catch (err) {
-        console.error('IndexedDB sync failed:', err);
-        loadingManager.failTask('db', 'Database sync failed');
-    }
-}
-
-window.addEventListener('offline', () => {
-    if (loadingManager.shouldShowLoading && !loadingManager.allTasksCompleted) {
-        console.log('Connection lost during loading - continuing with cached data');
-        loadingManager.statusText.textContent = 'Connection lost - loading cached data...';
-    }
-});
-
-window.addEventListener('online', () => {
-    if (loadingManager.shouldShowLoading && !loadingManager.allTasksCompleted) {
-        console.log('Connection restored - continuing downloads...');
-        loadingManager.statusText.textContent = 'Connection restored, continuing...';
-    }
-});
-
-setTimeout(() => {
-    if (loadingManager.shouldShowLoading && !loadingManager.allTasksCompleted) {
-        console.log('Maximum loading time reached (25s) - forcing completion');
-        
-        Object.keys(loadingManager.tasks).forEach(taskName => {
-            if (!loadingManager.tasks[taskName].completed) {
-                loadingManager.completeTask(taskName, 'Auto-completed');
-            }
-        });
-    }
-}, 25000);
-    </script>
-
-    <!-- IndexedDB Management Script -->
-    <script>
-// Initialize IndexedDB for Laravel CRMS
-function initCRMSDB() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open('CRMSDB', 3);
-    
-    request.onupgradeneeded = function(event) {
-      const db = event.target.result;
-      
-      // Create users store if it doesn't exist
-      if (!db.objectStoreNames.contains('users')) {
-        db.createObjectStore('users', { keyPath: 'id' });
-      }
-      
-      // Create dealers store if it doesn't exist
-      if (!db.objectStoreNames.contains('dealers')) {
-        db.createObjectStore('dealers', { keyPath: 'id' });
-      }
-      
-      // Create clients store if it doesn't exist
-      if (!db.objectStoreNames.contains('clients')) {
-        db.createObjectStore('clients', { keyPath: 'id' });
-      }
-      
-      // Create stoves store if it doesn't exist
-      if (!db.objectStoreNames.contains('stoves')) {
-        db.createObjectStore('stoves', { keyPath: 'id' });
-      }
-      
-      // Create items store if it doesn't exist
-      if (!db.objectStoreNames.contains('items')) {
-        db.createObjectStore('items', { keyPath: 'id' });
-      }
-    };
-    
-    request.onsuccess = function(event) {
-      resolve(event.target.result);
-    };
-    
-    request.onerror = function(event) {
-      reject('IndexedDB error: ' + event.target.error);
-    };
-  });
-}
-
-// Save users to IndexedDB with passwords and debugging
-async function saveUsersToIndexedDB() {
-  try {
-    console.log('📡 Fetching users from API...');
-    const response = await fetch('/api/get-users');
-    if (!response.ok) throw new Error('HTTP error ' + response.status);
-    
-    const users = await response.json();
-    
-    console.log('📥 Fetched users:', users.length);
-    console.log('🔐 First user data:', users[0]);
-    console.log('🔐 First user has password:', users[0]?.password ? 'YES ✅' : 'NO ❌');
-    
-    // Handle null values in the data
-    const cleanedUsers = users.map(user => {
-      const cleanUser = {};
-      for (const [key, value] of Object.entries(user)) {
-        cleanUser[key] = value === null ? '' : value;
-      }
-      return cleanUser;
-    });
-    
-    console.log('🧹 Cleaned first user:', cleanedUsers[0]);
-    console.log('🔐 Cleaned user has password:', cleanedUsers[0]?.password ? 'YES ✅' : 'NO ❌');
-    
-    const db = await initCRMSDB();
-    const tx = db.transaction('users', 'readwrite');
-    const store = tx.objectStore('users');
-    
-    // Clear existing data
-    store.clear();
-    
-    // Add each user
-    cleanedUsers.forEach(user => {
-      try {
-        store.put(user);
-      } catch (err) {
-        console.error('Error saving user:', user.id, err);
-      }
-    });
-    
-    tx.oncomplete = () => {
-      console.log('✅ Users saved to IndexedDB:', cleanedUsers.length, 'records');
-      console.log('🔐 Passwords included in sync!');
-    };
-    
-    tx.onerror = (e) => {
-      console.error('❌ Transaction error saving users:', e.target.error);
-    };
-    
-  } catch (err) {
-    console.error('❌ Error saving users:', err);
-  }
-}
-
-// Save dealers to IndexedDB with null handling
-async function saveDealersToIndexedDB() {
-  try {
-    console.log('📡 Fetching dealers from API...');
-    const response = await fetch('/api/get-dealers');
-    if (!response.ok) throw new Error('HTTP error ' + response.status);
-    
-    const dealers = await response.json();
-    console.log('📥 Fetched dealers:', dealers.length);
-    
-    // Handle null values - convert to empty strings
-    const cleanedDealers = dealers.map(dealer => {
-      const cleanDealer = {};
-      for (const [key, value] of Object.entries(dealer)) {
-        cleanDealer[key] = value === null ? '' : value;
-      }
-      return cleanDealer;
-    });
-    
-    console.log('🧹 Cleaned dealers:', cleanedDealers.length);
-    
-    const db = await initCRMSDB();
-    const tx = db.transaction('dealers', 'readwrite');
-    const store = tx.objectStore('dealers');
-    
-    // Clear existing data
-    store.clear();
-    
-    // Add each dealer
-    cleanedDealers.forEach(dealer => {
-      try {
-        store.put(dealer);
-      } catch (err) {
-        console.error('Error saving dealer:', dealer.id, err);
-      }
-    });
-    
-    tx.oncomplete = () => {
-      console.log('✅ Dealers saved to IndexedDB:', cleanedDealers.length, 'records');
-    };
-    
-    tx.onerror = (e) => {
-      console.error('❌ Transaction error saving dealers:', e.target.error);
-    };
-    
-  } catch (err) {
-    console.error('❌ Error saving dealers:', err);
-  }
-}
-
-// Save clients to IndexedDB with null handling
-async function saveClientsToIndexedDB() {
-  try {
-    console.log('📡 Fetching clients from API...');
-    const response = await fetch('/api/get-clients');
-    if (!response.ok) throw new Error('HTTP error ' + response.status);
-    
-    const clients = await response.json();
-    console.log('📥 Fetched clients:', clients.length);
-    
-    // Handle null values - convert to empty strings
-    const cleanedClients = clients.map(client => {
-      const cleanClient = {};
-      for (const [key, value] of Object.entries(client)) {
-        cleanClient[key] = value === null ? '' : value;
-      }
-      return cleanClient;
-    });
-    
-    console.log('🧹 Cleaned clients:', cleanedClients.length);
-    
-    const db = await initCRMSDB();
-    const tx = db.transaction('clients', 'readwrite');
-    const store = tx.objectStore('clients');
-    
-    // Clear existing data
-    store.clear();
-    
-    // Add each client
-    cleanedClients.forEach(client => {
-      try {
-        store.put(client);
-      } catch (err) {
-        console.error('Error saving client:', client.id, err);
-      }
-    });
-    
-    tx.oncomplete = () => {
-      console.log('✅ Clients saved to IndexedDB:', cleanedClients.length, 'records');
-    };
-    
-    tx.onerror = (e) => {
-      console.error('❌ Transaction error saving clients:', e.target.error);
-    };
-    
-  } catch (err) {
-    console.error('❌ Error saving clients:', err);
-  }
-}
-
-// Save stoves to IndexedDB with null handling
-async function saveStovesToIndexedDB() {
-  try {
-    console.log('📡 Fetching stoves from API...');
-    const response = await fetch('/api/get-stoves');
-    if (!response.ok) throw new Error('HTTP error ' + response.status);
-    
-    const stoves = await response.json();
-    console.log('📥 Fetched stoves:', stoves.length);
-    
-    // Handle null values - convert to empty strings
-    const cleanedStoves = stoves.map(stove => {
-      const cleanStove = {};
-      for (const [key, value] of Object.entries(stove)) {
-        cleanStove[key] = value === null ? '' : value;
-      }
-      return cleanStove;
-    });
-    
-    console.log('🧹 Cleaned stoves:', cleanedStoves.length);
-    
-    const db = await initCRMSDB();
-    const tx = db.transaction('stoves', 'readwrite');
-    const store = tx.objectStore('stoves');
-    
-    // Clear existing data
-    store.clear();
-    
-    // Add each stove
-    cleanedStoves.forEach(stove => {
-      try {
-        store.put(stove);
-      } catch (err) {
-        console.error('Error saving stove:', stove.id, err);
-      }
-    });
-    
-    tx.oncomplete = () => {
-      console.log('✅ Stoves saved to IndexedDB:', cleanedStoves.length, 'records');
-    };
-    
-    tx.onerror = (e) => {
-      console.error('❌ Transaction error saving stoves:', e.target.error);
-    };
-    
-  } catch (err) {
-    console.error('❌ Error saving stoves:', err);
-  }
-}
-
-// Save items to IndexedDB with null handling and BLOB support
-async function saveItemsToIndexedDB() {
-  try {
-    console.log('📡 Fetching items from API...');
-    const response = await fetch('/api/get-items');
-    if (!response.ok) throw new Error('HTTP error ' + response.status);
-    
-    const items = await response.json();
-    console.log('📥 Fetched items:', items.length);
-    
-    // Handle null values and ensure item_image is properly formatted
-    const cleanedItems = items.map(item => {
-      const cleanItem = {};
-      for (const [key, value] of Object.entries(item)) {
-        // Convert null to empty string
-        if (value === null) {
-          cleanItem[key] = '';
-        }
-        // Keep item_image as base64 string
-        else if (key === 'item_image') {
-          cleanItem[key] = value;
-        }
-        else {
-          cleanItem[key] = value;
-        }
-      }
-      return cleanItem;
-    });
-    
-    console.log('🧹 Cleaned items:', cleanedItems.length);
-    
-    const db = await initCRMSDB();
-    const tx = db.transaction('items', 'readwrite');
-    const store = tx.objectStore('items');
-    
-    store.clear();
-    
-    cleanedItems.forEach(item => {
-      try {
-        store.put(item);
-      } catch (err) {
-        console.error('Error saving item:', item.id, err);
-      }
-    });
-    
-    tx.oncomplete = () => {
-      console.log('✅ Items saved to IndexedDB:', cleanedItems.length, 'records');
-    };
-    
-    tx.onerror = (e) => {
-      console.error('❌ Transaction error saving items:', e.target.error);
-    };
-    
-  } catch (err) {
-    console.error('❌ Error saving items:', err);
-  }
-}
-
-async function saveAllDataToIndexedDB() {
-  console.log('🔄 Starting IndexedDB sync...');
-  
-  try {
-    await saveUsersToIndexedDB();
-    await saveDealersToIndexedDB();
-    await saveClientsToIndexedDB();
-    await saveStovesToIndexedDB();
-    await saveItemsToIndexedDB();
-    console.log('✅ IndexedDB sync completed!');
-  } catch (err) {
-    console.error('❌ IndexedDB sync failed:', err);
-  }
-}
-
-async function getDataFromIndexedDB(storeName) {
-  try {
-    const db = await initCRMSDB();
-    const tx = db.transaction(storeName, 'readonly');
-    const store = tx.objectStore(storeName);
-    
-    return new Promise((resolve, reject) => {
-      const request = store.getAll();
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  } catch (err) {
-    console.error('Error reading from IndexedDB:', err);
-    return [];
-  }
-}
-
-window.addEventListener('load', saveAllDataToIndexedDB);
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start, { once: true }); else start();
+        window.addEventListener('online', prepare);
+    })();
     </script>
 
     <script>
@@ -1307,63 +603,6 @@ window.addEventListener('appinstalled', (e) => {
 });
 
 if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-        const getBasePath = () => {
-            const path = window.location.pathname;
-            if (path.includes('/crms-risev2/public')) {
-                return '/crms-risev2/public';
-            }
-            return '';
-        };
-        
-        const BASE_PATH = getBasePath();
-        const swPath = `${BASE_PATH}/sw.js`;
-        const swScope = `${BASE_PATH}/`;
-        
-        console.log('🔍 PWA Environment:');
-        console.log('   SW Path:', swPath);
-        console.log('   SW Scope:', swScope);
-        
-        fetch(swPath)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error(`sw.js not found at ${swPath}`);
-                }
-                console.log('✅ sw.js file found');
-                
-                return navigator.serviceWorker.register(swPath, { 
-                    scope: swScope,
-                    updateViaCache: 'none'
-                });
-            })
-            .then(registration => {
-                console.log('✅ Service Worker registered successfully');
-                console.log('   Scope:', registration.scope);
-                
-                setInterval(() => {
-                    registration.update();
-                }, 60000);
-                
-                registration.addEventListener('updatefound', () => {
-                    const newWorker = registration.installing;
-                    console.log('🔄 New Service Worker found');
-                    
-                    newWorker.addEventListener('statechange', () => {
-                        if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                            console.log('✨ New version available!');
-                            if (confirm('New version available! Reload to update?')) {
-                                newWorker.postMessage({ type: 'SKIP_WAITING' });
-                                window.location.reload();
-                            }
-                        }
-                    });
-                });
-            })
-            .catch(error => {
-                console.error('❌ Service Worker registration failed:', error);
-            });
-    });
-
     navigator.serviceWorker.addEventListener('message', event => {
         const { type } = event.data;
         
@@ -1386,13 +625,7 @@ if ('serviceWorker' in navigator) {
         }
     });
 
-    navigator.serviceWorker.addEventListener('controllerchange', () => {
-        console.log('🔄 Service Worker controller changed');
-        if (!window.reloadTriggered) {
-            window.reloadTriggered = true;
-            window.location.reload();
-        }
-    });
+
 }
 
 window.addEventListener('online', () => {
@@ -1466,19 +699,7 @@ function retryConnection() {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-    Promise.all([
-        fetch('https://www.google.com/generate_204', {
-            method: 'HEAD',
-            mode: 'no-cors',
-            cache: 'no-store',
-            signal: controller.signal
-        }),
-        fetch('https://1.1.1.1/cdn-cgi/trace', {
-            method: 'GET',
-            cache: 'no-store',
-            signal: controller.signal
-        })
-    ])
+    Promise.all([fetch(@json(asset('manifest.json')), { method: 'HEAD', cache: 'no-store', signal: controller.signal })])
         .then(responses => {
             clearTimeout(timeoutId);
             
@@ -1531,22 +752,10 @@ function retryConnection() {
     }
 
 function redirectToOfflineMode() {
-    const getBasePath = () => {
-        const path = window.location.pathname;
-        if (path.includes('/crms-risev2/public')) {
-            return '/crms-risev2/public';
-        }
-        return '';
-    };
-    
-    // Check authentication
-    const currentUserId = localStorage.getItem('current_user_id');
-    const offlineUser = localStorage.getItem('offlineUser');
-    const isAuthenticated = !!(currentUserId || offlineUser);
-    
-    const targetPage = isAuthenticated ? 'home.html' : 'login.html';
-    const offlinePath = `${getBasePath()}/offline/${targetPage}`;
-    
+    let authenticated = false;
+    try { authenticated = !!(localStorage.getItem('current_user_id') || localStorage.getItem('offlineUser')); } catch (_) {}
+    const offlinePath = authenticated ? @json(asset('offline/home.html')) : @json(asset('offline/login.html'));
+
     Swal.fire({
         icon: 'info',
         title: 'Switching to Offline Mode',

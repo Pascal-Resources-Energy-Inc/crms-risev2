@@ -10,6 +10,7 @@ use App\Dealer;
 use App\OrderDetail;
 use App\TransactionDetail;
 use App\DealerStockRequest;
+use App\Support\OfflinePortalContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -27,7 +28,9 @@ class ProductController extends Controller
     {
         $user = auth()->user();
         // dd(auth()->user()->dealer);
-        $userDealer = optional($user->dealer);
+        // Both profile types are stored in admin_crms and provide the MFI
+        // and territory for the authenticated dealer-facing user.
+        $userDealer = optional($user->usesMegaDealerPricing() ? $user->megaDealer : $user->dealer);
         // dd($userDealer);
         $products = $this->applySalesTerritoryFilter(
             Product::with(['adProduct.areas'])->where('status', 'Activate'),
@@ -79,10 +82,11 @@ class ProductController extends Controller
             $transactions = TransactionDetail::where('dealer_id', auth()->user()->id)->get();
         }
 
-        $dealerProfile = null;
-        if (auth()->user()->isDealerLike()) {
-            $dealerProfile = Dealer::where('user_id', auth()->user()->id)->first();
-        }
+        $dealerProfile = auth()->user()->isDealerLike()
+            ? ($user->usesSrpPricing()
+                ? $user->centerChief
+                : ($user->usesMegaDealerPricing() ? $user->megaDealer : $user->dealer))
+            : null;
 
         return view('products', [
             'products' => $products,
@@ -324,6 +328,17 @@ class ProductController extends Controller
 
     private function getProductStockMaps($products, $selectedAdId = null)
     {
+        $user = auth()->user();
+        if ($user && $user->isDealerLike()) {
+            $context = new OfflinePortalContext;
+            [$dealer, $supplier] = $context->stockMaps($products, $user);
+            if (request('supplier_type') === 'mega_dealer') {
+                $megaDealer = $context->resolveOrderSupplier($user, 'mega_dealer', request('mega_dealer_id', request('supplier_id')), request('supplier_source', 'admin_crms'));
+                abort_unless($megaDealer, 403, 'Select a Mega Dealer in your sales area.');
+                foreach ($products as $product) $supplier[$product->id] = $context->supplierStock($product, $megaDealer);
+            }
+            return [collect($dealer), collect($supplier)->map(function ($quantity) { return ['stock' => (int) $quantity]; })];
+        }
         $productIds = $products->pluck('id')->filter()->values()->all();
         $productNames = $products->pluck('product_name')->filter()->values()->all();
         $productSkus = $products->pluck('sku')->filter()->values()->all();
@@ -483,7 +498,9 @@ class ProductController extends Controller
             return trim((string) optional($user->centerChief)->area);
         }
 
-        return trim((string) optional($user->dealer)->area);
+        $profile = $user->usesMegaDealerPricing() ? $user->megaDealer : $user->dealer;
+
+        return trim((string) optional($profile)->area);
     }
 
     /**
@@ -504,6 +521,7 @@ class ProductController extends Controller
 
         return $query->whereHas('adProduct.areas', function ($areaQuery) use ($territory) {
             $areaQuery->whereRaw('LOWER(TRIM(area_name)) = ?', [strtolower($territory)])
+                ->whereRaw('LOWER(TRIM(user_role)) = ?', ['area distributor'])
                 ->whereNull('deleted_at');
         });
     }

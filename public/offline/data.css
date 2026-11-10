@@ -1,0 +1,46 @@
+.offline-data-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
+    max-width: 1112px; margin: 0px auto; padding: 20px;
+    border: 1px solid #d0e5ee; border-radius: 16px; background: #edf8fc;
+    color: #24485f; font: 13px/1.5 system-ui, sans-serif; overflow-wrap: anywhere; clear: both;
+}
+.offline-data-bar [hidden] { display: none !important; }
+.offline-sync-indicator { flex: 0 0 12px; width: 12px; height: 12px; border-radius: 50%; background: #24976b; }
+.offline-data-bar[data-sync-phase='offline'] .offline-sync-indicator,
+.offline-data-bar[data-sync-phase='retrying'] .offline-sync-indicator { background: #ce952c; }
+.offline-data-bar[data-sync-phase='auth_required'] .offline-sync-indicator,
+.offline-data-bar[data-sync-phase='error'] .offline-sync-indicator { background: #cf6262; }
+.offline-data-bar[data-sync-phase='checking'] .offline-sync-indicator,
+.offline-data-bar[data-sync-phase='syncing'] .offline-sync-indicator,
+.offline-data-bar[data-sync-phase='refreshing'] .offline-sync-indicator {
+    background: transparent; border: 2px solid #087ba7; border-right-color: transparent;
+    animation: offline-data-spin .8s linear infinite;
+}
+.offline-sync-summary { flex: 1 1 260px; min-width: 0; }
+.offline-sync-title { display: block; color: #21495f; font-size: 13px; font-weight: 750; }
+.offline-sync-description { display: block; margin-top: 3px; color: #58758a; font-size: 12px; }
+.offline-sync-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 6px; color: #6c8494; font-size: 11px; }
+.offline-sync-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.offline-data-bar button, .offline-sync-actions a {
+    min-height: 44px; padding: 10px 14px; border: 1px solid #b6d4e1; border-radius: 10px;
+    display: inline-flex; align-items: center; justify-content: center; text-decoration: none;
+    background: #fff; color: #086f95; font: 700 12px system-ui, sans-serif; cursor: pointer;
+}
+.offline-data-bar button:hover:not(:disabled) { background: #f8fcff; border-color: #65a6c2; }
+.offline-data-bar button:disabled { opacity: .5; cursor: not-allowed; }
+.offline-data-bar button:focus-visible, .offline-sync-actions a:focus-visible { outline: 3px solid #ffb64d; outline-offset: 3px; }
+.offline-data-bar .offline-update-note { flex-basis: 100%; padding-top: 12px; border-top: 1px solid #d0e5ee; color: #4a6b80; }
+.offline-data-bar .offline-apply-update { background: #087ba7; border-color: #087ba7; color: #fff; }
+.offline-inline-error { padding: 14px; color: #a12929; }
+.offline-checkout-notice { margin: 16px; padding: 14px; border-radius: 12px; background: #fff6df; color: #694a0d; line-height: 1.5; }
+.offline-app .offline-data-bar { width: calc(100% - 48px); margin-bottom: 24px; }
+.offline-auth .offline-data-bar { width: calc(100% - 40px); margin-bottom: 24px; }
+@keyframes offline-data-spin { to { transform: rotate(360deg); } }
+@media (max-width: 700px) {
+    .offline-data-bar { margin-left: 16px; margin-right: 16px; padding: 16px; gap: 12px; }
+    .offline-app .offline-data-bar { width: calc(100% - 32px); }
+    .offline-sync-summary { flex-basis: calc(100% - 28px); }
+    .offline-sync-actions { flex: 1 1 100%; }
+    .offline-sync-actions button, .offline-sync-actions a { flex: 1 1 120px; }
+}
+@media (prefers-reduced-motion: reduce) { .offline-sync-indicator { animation: none !important; } }

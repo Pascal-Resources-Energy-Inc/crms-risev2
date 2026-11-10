@@ -14,6 +14,10 @@
 Route::get('/', 'HomeController@index')->name('home');
 Route::get('/dashboard', 'HomeController@index')->name('dashboard');
 Route::get('/home', 'HomeController@index')->name('home');
+Route::get('/api/mega-dealer/orders/received', 'ReceivedDealerOrderController@index')
+    ->middleware('auth')->name('received.dealer.orders');
+Route::post('/mega-dealer/orders/{id}/fulfil', 'ReceivedDealerOrderController@fulfil')
+    ->middleware('auth')->name('received.dealer.orders.fulfil');
 Route::get('/notification', 'NotificationController@index')->name('notification');
 Route::post('/notifications/{id}/mark-viewed', 'NotificationController@markAsViewed')->name('notifications.markViewed');
 Route::post('/notifications/mark-all-read', 'NotificationController@markAllAsRead')->name('notifications.markAllRead');
@@ -93,6 +97,9 @@ Route::post('/rewards', 'RewardController@store')->name('rewards.store');
 
 
 // User Sync Route for offline mode
+Route::get('/api/offline/snapshot', 'OfflineOrderController@snapshot')->middleware('auth')->name('offline.snapshot');
+Route::get('/api/offline/session', 'OfflineOrderController@session')->middleware('auth')->name('offline.session');
+Route::post('/api/offline/orders', 'OfflineOrderController@store')->middleware('auth')->name('offline.orders');
 Route::get('/api/get-users', 'UserController@getUsers')->name('api.users');
 Route::get('/api/get-dealers', 'DealerController@getDealers')->name('api.dealers');
 Route::get('/api/get-clients', 'ClientController@getClients')->name('api.clients');
