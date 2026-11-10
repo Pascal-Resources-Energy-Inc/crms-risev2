@@ -114,10 +114,16 @@
         }
         function recipient(row) {
             if (row.recipient_name) return row.recipient_name;
+            if (row.supplier_name) return row.supplier_name;
             if (row.customer_name) return row.customer_name;
             const recipients = saved ? row.type === 'order' ? saved.distributors : saved.customers : [];
-            const target = (recipients || []).find(item => String(item.id) === String(row.type === 'order' ? row.ad_id : row.client_id));
-            return target ? target.display_name || target.name : row.type === 'order' ? 'Area Distributor' : 'Customer';
+            const mega = row.type === 'order' && row.supplier_type === 'mega_dealer';
+            const sourceOf = value => value.supplier_source == null || value.supplier_source === '' ? 'admin_crms' : value.supplier_source;
+            const source = sourceOf(row);
+            const target = (recipients || []).find(item => String(item.supplier_id || item.id) === String(row.type === 'order' ? mega ? row.mega_dealer_id : row.ad_id : row.client_id) &&
+                (row.type !== 'order' || (item.supplier_type || 'area_distributor') === (row.supplier_type || 'area_distributor')) &&
+                (!mega || ['admin_crms', 'dms_prei'].includes(source) && sourceOf(item) === source));
+            return target ? target.display_name || target.name : row.type === 'order' ? mega ? 'Mega Dealer' : 'Area Distributor' : 'Customer';
         }
         function transactionReference(row) {
             if (row.source !== 'device') return row.transaction_id ? 'Transaction ID: ' + row.transaction_id : 'Transaction ID is awaiting a server update.';
@@ -155,7 +161,7 @@
             rows.forEach(row => {
                 const card = node('article', 'entry'), header = node('div', 'entry-header');
                 const statusClass = row.source === 'device' ? row.status : String(row.status).toLowerCase() === 'pending' ? 'pending' : '';
-                header.append(node('h3', '', (row.type === 'order' ? 'AD Order · ' : 'Client Transaction · ') + recipient(row)), node('span', 'status ' + statusClass, statusLabel(row)));
+                header.append(node('h3', '', (row.type === 'order' ? row.supplier_type === 'mega_dealer' ? 'Mega Dealer Order · ' : 'AD Order · ' : 'Client Transaction · ') + recipient(row)), node('span', 'status ' + statusClass, statusLabel(row)));
                 card.append(header, node('p', 'muted', transactionReference(row)));
                 if (row.sort) card.append(node('p', 'muted', new Date(row.sort).toLocaleString()));
                 const items = row.source === 'device' ? row.items || [] : [{ name: row.item, quantity: row.qty, unit_price: row.price }];

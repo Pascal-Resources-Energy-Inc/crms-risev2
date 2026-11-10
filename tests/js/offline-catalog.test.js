@@ -16,6 +16,112 @@ test('catalog filters order products by the selected AD without excluding zero s
     assert.deepEqual(catalog.productsFor(saved, context(), 'refill').map(row => row.id), [10]);
 });
 
+test('a Dealer can choose a same-area Mega Dealer without confusing an overlapping AD ID', async () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push({ id: 200, name: 'North Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10], stock_by_product: { 10: 6 } });
+    const h = harness(catalogIds, {}, saved);
+    h.api.validateOrder = require('../../public/offline/data.js')(h.win, {}).validateOrder;
+    catalog.mount(h.win); await settle(); h.node('orderMode').onchange();
+    assert.equal(h.parsed('offlineCartContext').ad_id, 200);
+    assert.match(h.node('distributorSelect').textContent, /Area Distributor · Assigned AD/);
+    assert.doesNotMatch(h.node('distributorSelect').textContent, /Mega Dealer/);
+    assert.equal(h.node('supplierAD').checked, true); assert.equal(h.node('supplierMega').disabled, false);
+    h.node('supplierMega').onchange();
+    assert.match(h.node('distributorSelect').textContent, /Mega Dealer · North Mega Dealer/);
+    assert.doesNotMatch(h.node('distributorSelect').textContent, /Assigned AD/);
+    h.node('distributorSelect').value = 'mega_dealer:200'; h.node('distributorSelect').onchange();
+    assert.equal(h.node('productGrid').children.length, 1);
+    assert.match(h.node('productGrid').textContent, /Mega Dealer stock: 6/);
+    const button = h.node('productGrid').children[0].children[4].children[1]; button.onclick();
+    h.node('productQuantity').value = 20; h.node('quantityForm').onsubmit({ preventDefault() {} });
+    const selected = h.parsed('offlineCartContext');
+    assert.equal(selected.supplier_type, 'mega_dealer'); assert.equal(selected.mega_dealer_id, 200); assert.equal(selected.ad_id, null);
+    assert.equal(h.parsed('dealerCartData')[0].price, 50);
+    assert.equal(h.parsed('dealerCartData')[0].quantity, 20);
+});
+
+test('DMS and local Mega Dealers with the same ID keep distinct selections, products and saved carts', async () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push(
+        { id: 200, name: 'Local Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10], stock_by_product: { 10: 6 } },
+        { id: 200, name: 'DMS Mega Dealer', supplier_type: 'mega_dealer', supplier_source: 'dms_prei', product_ids: [11], stock_by_product: { 11: 9 } }
+    );
+    const selected = context({ supplier_type: 'mega_dealer', mega_dealer_id: 200, supplier_source: 'dms_prei', ad_id: null });
+    const h = harness(catalogIds, { offlineCartContext: selected, dealerCartData: [] }, saved);
+    h.api.validateOrder = require('../../public/offline/data.js')(h.win, {}).validateOrder;
+    catalog.mount(h.win); await settle();
+    assert.equal(h.node('distributorSelect').value, 'mega_dealer:dms_prei:200');
+    assert.deepEqual(h.node('distributorSelect').children.slice(1).map(option => option.value), ['mega_dealer:200', 'mega_dealer:dms_prei:200']);
+    assert.match(h.node('productGrid').textContent, /Cylinder/); assert.doesNotMatch(h.node('productGrid').textContent, /Refill/);
+    assert.match(h.node('productGrid').textContent, /Mega Dealer stock: 9/);
+    h.node('productGrid').children[0].children[4].children[1].onclick();
+    h.node('productQuantity').value = 2; h.node('quantityForm').onsubmit({ preventDefault() {} });
+    assert.equal(h.parsed('offlineCartContext').supplier_source, 'dms_prei');
+    assert.equal(h.parsed('dealerCartData')[0].product_id, 11);
+    h.win.confirm = () => false; h.node('distributorSelect').value = 'mega_dealer:200'; h.node('distributorSelect').onchange();
+    assert.equal(h.node('distributorSelect').value, 'mega_dealer:dms_prei:200');
+    assert.equal(h.parsed('dealerCartData').length, 1);
+    h.win.confirm = () => true; h.node('distributorSelect').value = 'mega_dealer:200'; h.node('distributorSelect').onchange();
+    assert.equal(h.parsed('offlineCartContext').supplier_source, undefined);
+    assert.equal(h.parsed('dealerCartData').length, 0);
+    assert.match(h.node('productGrid').textContent, /Refill/); assert.doesNotMatch(h.node('productGrid').textContent, /Cylinder/);
+});
+
+test('a removed DMS Mega Dealer cannot fall back to a local supplier with the same ID', () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push({ id: 200, name: 'Local Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10] });
+    const selected = context({ supplier_type: 'mega_dealer', mega_dealer_id: 200, supplier_source: 'dms_prei', ad_id: null });
+    assert.deepEqual(catalog.productsFor(saved, selected, ''), []);
+    for (const source of ['unknown', false, 0, {}]) assert.deepEqual(catalog.productsFor(saved, { ...selected, supplier_source: source }, ''), []);
+});
+
+test('reopening the order mode does not replace an unavailable saved DMS supplier with the only local match', async () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push({ id: 200, name: 'Local Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10] });
+    const selected = context({ supplier_type: 'mega_dealer', mega_dealer_id: 200, supplier_source: 'dms_prei', ad_id: null });
+    const h = harness(catalogIds, { offlineCartContext: selected, dealerCartData: [item()] }, saved);
+    catalog.mount(h.win); await settle(); h.node('orderMode').onchange(); h.node('supplierMega').onchange();
+    assert.equal(h.parsed('offlineCartContext').supplier_source, 'dms_prei');
+    assert.equal(h.parsed('dealerCartData').length, 1); assert.equal(h.node('distributorSelect').value, '');
+    assert.match(h.node('catalogNotice').textContent, /previously selected Mega Dealer is unavailable/);
+    assert.doesNotMatch(h.node('productGrid').textContent, /Refill/);
+});
+
+test('supplier radio switches preserve an unsent cart when replacement is cancelled', async () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push({ id: 200, name: 'North Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10] });
+    const h = harness(catalogIds, { offlineCartContext: context(), dealerCartData: [item()] }, saved);
+    h.win.confirm = () => false; catalog.mount(h.win); await settle(); h.node('supplierMega').onchange();
+    assert.equal(h.node('supplierAD').checked, true); assert.equal(h.node('supplierMega').checked, false);
+    assert.equal(h.parsed('offlineCartContext').ad_id, 200); assert.equal(h.parsed('dealerCartData').length, 1);
+    h.win.confirm = () => true; h.node('supplierMega').onchange();
+    assert.equal(h.parsed('offlineCartContext').supplier_type, 'mega_dealer'); assert.equal(h.parsed('dealerCartData').length, 0);
+});
+
+test('an explicit Mega Dealer choice restores its radio and filtered supplier after reopening', async () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push({ id: 200, name: 'North Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10] });
+    const selected = context({ supplier_type: 'mega_dealer', mega_dealer_id: 200, ad_id: null });
+    const h = harness(catalogIds, { offlineCartContext: selected, dealerCartData: [] }, saved);
+    catalog.mount(h.win); await settle();
+    assert.equal(h.node('supplierMega').checked, true); assert.equal(h.node('supplierAD').checked, false);
+    assert.equal(h.node('distributorSelect').value, 'mega_dealer:200');
+    assert.doesNotMatch(h.node('distributorSelect').textContent, /Assigned AD/);
+    h.node('orderMode').onchange();
+    assert.equal(h.parsed('offlineCartContext').mega_dealer_id, 200); assert.equal(h.parsed('offlineCartContext').ad_id, null);
+});
+
+test('a Mega Dealer radio is disabled for another role or when no eligible Mega Dealer exists', async () => {
+    for (const role of ['Mega Dealer', 'center_chief', 'Dealer']) {
+        const saved = snapshot(); saved.user.role = role;
+        if (role !== 'Dealer') saved.distributors.push({ id: 200, name: 'Ineligible Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10] });
+        const h = harness(catalogIds, {}, saved); catalog.mount(h.win); await settle(); h.node('orderMode').onchange();
+        assert.equal(h.node('supplierMega').disabled, true); h.node('supplierMega').onchange();
+        assert.equal(h.node('supplierAD').checked, true); assert.doesNotMatch(h.node('distributorSelect').textContent, /Ineligible/);
+        assert.match(h.node('supplierTypeHelp').textContent, role === 'Dealer' ? /No eligible Mega Dealer/ : /Dealer accounts/);
+    }
+});
+
 test('the first saved snapshot populates an already open empty catalog', async () => {
     const h = harness(catalogIds, {}, null); catalog.mount(h.win); await settle();
     assert.match(h.node('productGrid').textContent, /No saved catalog/);

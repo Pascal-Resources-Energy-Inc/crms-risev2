@@ -2,6 +2,16 @@
 @section('header')
 
 @endsection
+@section('css')
+    <link rel="stylesheet" href="{{ asset('inside_css/assets/css/received-orders.css') }}?v={{ filemtime(public_path('inside_css/assets/css/received-orders.css')) }}">
+@endsection
+@section('js')
+    @if(auth()->user()->usesMegaDealerPricing())
+        <script src="{{ asset('login_css/js/jquery-3.3.1.min.js') }}"></script>
+        <script src="{{ asset('design/assets/libs/datatables.net/js/jquery.dataTables.min.js') }}"></script>
+        <script src="{{ asset('inside_css/assets/js/received-orders.js') }}?v={{ filemtime(public_path('inside_css/assets/js/received-orders.js')) }}"></script>
+    @endif
+@endsection
 <style>
     .main-content-wrapper {
         padding: 20px 16px 100px 16px;
@@ -668,6 +678,11 @@
                                 $cancelExpiresAt = $createdAt->copy()->addHour();
                                 $minutesLeftToCancel = max(0, now()->diffInMinutes($cancelExpiresAt, false));
                                 $isPendingOrder = ($transaction['status'] ?? '') === 'Pending';
+                                $isMegaDealerOrder = ($transaction['supplier_type'] ?? '') === 'mega_dealer';
+                                $canCompleteOrder = $isMegaDealerOrder
+                                    ? ($transaction['status'] ?? '') === 'For Verification' && auth()->user()->isDealerLike()
+                                        && !auth()->user()->usesMegaDealerPricing() && !auth()->user()->usesSrpPricing()
+                                    : !in_array($transaction['status'], ['Completed', 'Cancelled', 'Pending'], true);
                                 $canCancelOrder = $isPendingOrder && now()->lessThanOrEqualTo($cancelExpiresAt);
                             @endphp
                             <div class="mb-3 p-3 rounded-4 border bg-white shadow-sm order-transaction-card" id="ad-order-card-{{ $transaction['id'] }}">
@@ -688,11 +703,15 @@
                                             <div class="fw-bold text-dark fs-6">
                                                 {{ strtoupper(optional($transaction['ad'])->name ?? 'AREA DISTRIBUTOR') }}
                                             </div>
+                                            <span class="badge bg-light text-primary border mt-1">{{ ($transaction['supplier_type'] ?? '') === 'mega_dealer' ? 'Mega Dealer' : 'Area Distributor' }}</span>
+                                            @if($isMegaDealerOrder)
+                                                <div class="small text-muted mt-1">{{ $transaction['transaction_id'] ?? '' }}</div>
+                                            @endif
 
                                             <!-- CONTACT -->
                                             <div class="small text-muted mt-1">
                                                 <i class="bi bi-telephone text-info me-1"></i>
-                                                {{ optional($transaction['ad'])->contact_number ?? 'No contact number' }}
+                                                {{ optional($transaction['ad'])->contact_number ?? optional($transaction['ad'])->number ?? 'No contact number' }}
                                             </div>
 
                                             <!-- ADDRESS (🔥 NEW) -->
@@ -750,6 +769,7 @@
                                                     $statusColors = [
                                                         'Pending' => 'warning text-dark',
                                                         'For Delivery' => 'info text-dark',
+                                                        'For Verification' => 'info text-dark',
                                                         'Completed' => 'success',
                                                         'Cancelled' => 'danger'
                                                     ];
@@ -792,6 +812,9 @@
 
                                         <!-- AREAS -->
                                         <div class="mt-2 d-flex flex-wrap justify-content-end gap-1 order-areas">
+                                            @if(($transaction['supplier_type'] ?? '') === 'mega_dealer')
+                                                <span class="badge rounded-pill bg-light text-dark border">{{ optional($transaction['ad'])->area }}</span>
+                                            @else
                                             @forelse(optional($transaction['ad'])->areas ?? [] as $area)
                                                 <span class="badge rounded-pill bg-light text-dark border">
                                                     <i class="bi bi-map text-danger me-1"></i>
@@ -800,6 +823,7 @@
                                             @empty
                                                 <span class="badge bg-secondary">No Area</span>
                                             @endforelse
+                                            @endif
                                         </div>
                                         
                                         <div class="mt-3" id="order-actions-{{ $transaction['id'] }}">
@@ -824,10 +848,12 @@
                                                     </button>
                                                 @endif
 
-                                                @if(!in_array($transaction['status'], ['Completed','Cancelled','Pending']))
+                                                @if($canCompleteOrder)
                                                 <button type="button"
                                                         class="btn btn-success btn-sm complete-btn"
-                                                        data-id="{{ $transaction['id'] }}">
+                                                        data-id="{{ $transaction['id'] }}"
+                                                        data-max-remarks="{{ $isMegaDealerOrder ? 255 : 500 }}"
+                                                        data-verification="{{ $isMegaDealerOrder ? 'true' : 'false' }}">
                                                     <i class="bi bi-check-circle me-1"></i> Mark Completed
                                                 </button>
                                                 @endif
@@ -865,6 +891,9 @@
                     </div>
                 </div>
             </div>
+            @if(auth()->user()->usesMegaDealerPricing())
+                @include('partials.mega_dealer_orders')
+            @endif
         </section>
     @endif
 
@@ -1550,8 +1579,10 @@
         document.querySelectorAll('.complete-btn').forEach(btn => {
 
             btn.addEventListener('click', async function () {
-
+                if (this.disabled) return;
                 const id = this.dataset.id;
+                const remarksLimit = this.dataset.maxRemarks === '255' ? 255 : 500;
+                const verifyingReceipt = this.dataset.verification === 'true';
                 const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
                 if (!csrf) {
@@ -1559,17 +1590,22 @@
                     return;
                 }
 
-                // ✅ FIXED URL (works with /public folder)
                 const url = `${baseUrl}/ad-orders/${encodeURIComponent(id)}/complete`;
+                const actionsEl = document.getElementById(`order-actions-${id}`);
+                const actionStates = Array.from(actionsEl ? actionsEl.querySelectorAll('button') : [this])
+                    .map(button => [button, button.disabled]);
+                actionStates.forEach(([button]) => { button.disabled = true; });
+                this.setAttribute('aria-busy', 'true');
 
                 try {
                     const remarksResult = await Swal.fire({
-                        title: 'Completion Remarks',
+                        title: verifyingReceipt ? 'Confirm order received' : 'Completion Remarks',
+                        text: verifyingReceipt ? 'Confirm that you received this order from the Mega Dealer. It will be marked as completed and added to your stock.' : undefined,
                         input: 'textarea',
                         inputLabel: 'Remarks',
                         inputPlaceholder: 'Enter remarks before marking this order as completed',
                         inputAttributes: {
-                            maxlength: 500
+                            maxlength: remarksLimit
                         },
                         showCancelButton: true,
                         confirmButtonText: 'Mark Completed',
@@ -1580,6 +1616,10 @@
 
                             if (!remarks) {
                                 Swal.showValidationMessage('Remarks are required.');
+                                return false;
+                            }
+                            if (remarks.length > remarksLimit) {
+                                Swal.showValidationMessage(`Remarks may not be greater than ${remarksLimit} characters.`);
                                 return false;
                             }
 
@@ -1593,6 +1633,7 @@
 
                     const response = await fetch(url, {
                         method: 'POST',
+                        credentials: 'same-origin',
                         headers: {
                             'X-CSRF-TOKEN': csrf,
                             'X-Requested-With': 'XMLHttpRequest',
@@ -1606,8 +1647,10 @@
 
                     const data = await response.json().catch(() => null);
 
-                    if (!response.ok) {
-                        throw new Error(data?.message || `Request failed (${response.status})`);
+                    if (!response.ok || data?.success !== true || (verifyingReceipt && data?.status !== 'Completed')) {
+                        throw new Error(data?.message || (response.ok
+                            ? 'Order completion could not be confirmed. Refresh the page and try again.'
+                            : `Request failed (${response.status})`));
                     }
 
                     const badgeEl = document.getElementById(`status-badge-${id}`);
@@ -1619,12 +1662,16 @@
                             </span>`;
                     }
 
-                    this.remove();
+                    if (actionsEl) actionsEl.innerHTML = '';
+                    else this.remove();
 
                     Swal.fire('Success', data?.message || 'Order completed', 'success');
 
                 } catch (error) {
                     Swal.fire('Error', error.message, 'error');
+                } finally {
+                    this.removeAttribute('aria-busy');
+                    actionStates.forEach(([button, disabled]) => { button.disabled = disabled; });
                 }
 
             });

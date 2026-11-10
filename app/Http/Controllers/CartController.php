@@ -7,6 +7,7 @@ use App\AreaDistributor;
 use App\Item;
 use App\Client;
 use App\Dealer;
+use App\Support\OfflinePortalContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -202,6 +203,10 @@ class CartController extends Controller
         $availableADs = $user->isDealerLike()
             ? $matchedADs
             : ($matchedADs->isNotEmpty() ? $matchedADs : $areaDistributor);
+
+        if ($user->isDealerLike()) {
+            $matchedADs = $availableADs = (new OfflinePortalContext)->suppliers($user);
+        }
 
         return view('cart', [
             'transactions' => $transactions,

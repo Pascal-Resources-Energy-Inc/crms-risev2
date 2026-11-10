@@ -62,7 +62,7 @@ function harness(ids, initialStorage = {}, initialSnapshot = snapshot()) {
     };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
-const catalogIds = 'catalogNotice cartCount clientMode orderMode customerField distributorField customerSelect distributorSelect snapshotTime productGrid productSearch quantityTitle quantityAvailability productQuantity saveQuantity removeItem quantityError quantityTotal quantityDialog refreshData startNewCart viewCart cancelQuantity quantityForm'.split(' ');
+const catalogIds = 'catalogNotice cartCount clientMode orderMode customerField distributorField customerSelect distributorSelect supplierAD supplierMega supplierTypeHelp snapshotTime productGrid productSearch quantityTitle quantityAvailability productQuantity saveQuantity removeItem quantityError quantityTotal quantityDialog refreshData startNewCart viewCart cancelQuantity quantityForm'.split(' ');
 const cartIds = 'checkoutNotice cartItems recipientLabel recipientName recipientDetails cartTotal reviewOrder paymentMethod deliveryType'.split(' ');
 const confirmationIds = 'checkoutNotice confirmationItems recipientLabel recipientName recipientDetails cartTotal saveOrder paymentSummary deliverySummary pendingLink'.split(' ');
 const context = overrides => ({ user_id: 42, type: 'order', ad_id: 200, client_id: null, ...overrides });

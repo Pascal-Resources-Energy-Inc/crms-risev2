@@ -41,7 +41,7 @@ class OfflineSnapshotData
             ->when($user->isDealerLike(), function ($query) use ($user) { $query->where('dealer_id', $user->id); },
                 function ($query) use ($profile) { $query->where('client_id', optional($profile)->id ?: -1); })
             ->orderBy('id', 'desc')->limit(500)->get() : collect();
-        $orders = $user->isDealerLike() && Schema::hasTable('order_details') ? OrderDetail::where('dealer_id', $user->id)
+        $orders = $user->isDealerLike() && Schema::hasTable('order_details') ? OrderDetail::with(['ad', 'megaDealer'])->where('dealer_id', $user->id)
             ->orderBy('id', 'desc')->limit(500)->get() : collect();
         $earned = Schema::hasTable('transaction_details') ? TransactionDetail::query()
             ->when($user->isDealerLike(), function ($query) use ($user) { $query->where('dealer_id', $user->id); },
@@ -56,6 +56,24 @@ class OfflineSnapshotData
         }
         $profileData['sales_territory'] = $context->territory($user);
         [$acknowledgedOrders, $acknowledgedResults] = $this->acknowledgements($user->id);
+        $supplierData = $distributors->map(function ($ad) use ($context, $profile) {
+            return ['id' => (int) $ad->id, 'supplier_id' => (int) $ad->id, 'supplier_type' => 'area_distributor', 'key' => 'area_distributor:' . $ad->id,
+                'user_id' => (int) $ad->user_id, 'name' => $ad->name,
+                'number' => $ad->contact_number ?? $ad->number, 'address' => $ad->address, 'sales_territories' => $ad->areas->pluck('area_name')->values()->all(),
+                'distance' => $context->distance($profile, $ad)];
+        })->values();
+        foreach ($context->megaDealers($user) as $megaDealer) {
+            $catalog = $context->supplierProducts($user, $megaDealer);
+            $stock = [];
+            foreach ($catalog as $product) $stock[$product->id] = $context->supplierStock($product, $megaDealer);
+            $supplierData->push(['id' => (int) $megaDealer->id, 'supplier_id' => (int) $megaDealer->id,
+                'supplier_type' => 'mega_dealer', 'key' => $megaDealer->supplier_key, 'supplier_source' => $megaDealer->supplier_source,
+                'user_id' => (int) $megaDealer->user_id, 'name' => $megaDealer->name,
+                'number' => $megaDealer->contact_number ?? $megaDealer->number, 'address' => $megaDealer->address,
+                'sales_territories' => [(string) $megaDealer->area], 'distance' => $context->distance($profile, $megaDealer),
+                'product_ids' => $catalog->pluck('id')->map(function ($id) { return (int) $id; })->values()->all(),
+                'stock_by_product' => (object) $stock]);
+        }
         return [
             'schema_version' => 1, 'saved_at' => date(DATE_ATOM),
             'user' => ['id' => (int) $user->id, 'name' => $user->name, 'email' => $user->email, 'role' => $user->role],
@@ -73,15 +91,15 @@ class OfflineSnapshotData
                     'client_allowed' => $context->clientAllowed($product)];
             })->values()->all(),
             'customers' => $customerData,
-            'distributors' => $distributors->map(function ($ad) use ($context, $profile) {
-                return ['id' => (int) $ad->id, 'user_id' => (int) $ad->user_id, 'name' => $ad->name,
-                    'number' => $ad->contact_number ?? $ad->number, 'address' => $ad->address, 'sales_territories' => $ad->areas->pluck('area_name')->values()->all(),
-                    'distance' => $context->distance($profile, $ad)];
-            })->values()->all(),
+            'distributors' => $supplierData->all(),
             'transactions' => $transactions->map(function ($row) use ($customerNames) {
                 return $this->historyRow($row) + ['client_id' => $row->client_id, 'customer_name' => $customerNames[$row->client_id] ?? 'Customer'];
             })->values()->all(),
-            'orders' => $orders->map(function ($row) { return $this->historyRow($row) + ['ad_id' => $row->ad_id]; })->values()->all(),
+            'orders' => $orders->map(function ($row) {
+                return $this->historyRow($row) + ['ad_id' => $row->ad_id,
+                    'mega_dealer_id' => $row->mega_dealer_id, 'supplier_source' => $row->supplier_source,
+                    'supplier_type' => $row->supplier_type, 'supplier_name' => $row->supplier_name];
+            })->values()->all(),
             'acknowledged_orders' => $acknowledgedOrders,
             'acknowledged_order_results' => (object) $acknowledgedResults,
             'stoves' => [],

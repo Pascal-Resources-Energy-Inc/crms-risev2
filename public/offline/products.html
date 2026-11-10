@@ -57,17 +57,22 @@
           </small>
         </div>
         <div class="field" id="distributorField" hidden>
+          <fieldset class="supplier-type-options" aria-describedby="supplierTypeHelp">
+            <legend>Order from</legend>
+            <div class="supplier-type-choices">
+              <label><input type="radio" name="orderSupplierType" id="supplierAD" value="area_distributor" checked> <span>Area Distributor (AD)</span></label>
+              <label><input type="radio" name="orderSupplierType" id="supplierMega" value="mega_dealer"> <span>Mega Dealer</span></label>
+            </div>
+            <small id="supplierTypeHelp">Choose a supplier type, then select a supplier in your area.</small>
+          </fieldset>
           <label for="distributorSelect">
-            Area Distributor
+            Supplier
           </label>
           <select id="distributorSelect" disabled>
             <option value="">
-              Select Area Distributor
+              Select supplier
             </option>
           </select>
-          <small>
-            Order from an assigned AD, including products awaiting stock.
-          </small>
         </div>
         <div class="field">
           <label for="productSearch">

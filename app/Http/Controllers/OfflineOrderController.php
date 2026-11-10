@@ -50,6 +50,8 @@ class OfflineOrderController extends Controller
         $data = Validator::make($request->all(), [
             'idempotency_key' => 'required|uuid', 'user_id' => 'required|integer',
             'type' => 'required|in:client,order', 'ad_id' => 'nullable|integer', 'client_id' => 'nullable|integer',
+            'supplier_type' => 'nullable|in:area_distributor,mega_dealer', 'mega_dealer_id' => 'nullable|integer',
+            'supplier_source' => 'nullable|in:admin_crms,dms_prei',
             'payment_method' => 'required|in:cash,gcash,bank_transfer,credit', 'delivery_type' => 'required|in:pickup,delivery',
             'items' => 'required|array|min:1|max:100', 'items.*.product_id' => 'required|integer|distinct',
             'items.*.quantity' => 'required|integer|min:1|max:1000000', 'items.*.unit_price' => 'required|numeric|min:0',
@@ -57,6 +59,20 @@ class OfflineOrderController extends Controller
         ])->validate();
         if (!Schema::hasTable('offline_order_receipts')) {
             throw new HttpException(503, 'Offline syncing is not prepared on the server. Your saved transactions are kept.');
+        }
+        $supplierType = $data['supplier_type'] ?? 'area_distributor';
+        if ($data['type'] === 'order') {
+            if ($supplierType === 'mega_dealer') {
+                if (empty($data['mega_dealer_id']) || !empty($data['ad_id'])) $this->invalid('recipient', 'Select one Mega Dealer supplier for this order.');
+                if (!Schema::hasColumn('order_details', 'mega_dealer_id')) {
+                    throw new HttpException(503, 'Mega Dealer ordering is not prepared on the server. Your saved order is kept.');
+                }
+                if (($data['supplier_source'] ?? 'admin_crms') === 'dms_prei' && !Schema::hasColumn('order_details', 'mega_dealer_source')) {
+                    throw new HttpException(503, 'DMS Mega Dealer ordering is not prepared on the server. Your saved order is kept.');
+                }
+            } elseif (!empty($data['mega_dealer_id'])) $this->invalid('recipient', 'Choose the supplier type that matches this order.');
+        } elseif ($supplierType === 'mega_dealer' || !empty($data['mega_dealer_id'])) {
+            $this->invalid('recipient', 'Client transactions require a customer, not an order supplier.');
         }
         $hash = $this->payloadHash($data);
         $notifications = [];
@@ -72,16 +88,19 @@ class OfflineOrderController extends Controller
                     'response_json' => null, 'created_at' => date('Y-m-d H:i:s'), 'updated_at' => date('Y-m-d H:i:s'),
                 ]);
                 $suppliers = $context->distributors($user);
-                $products = $context->products($user, $suppliers)->keyBy('id');
                 $recipient = $data['type'] === 'order'
-                    ? $suppliers->firstWhere('id', $data['ad_id'] ?? null)
+                    ? $context->resolveOrderSupplier($user, $data['supplier_type'] ?? 'area_distributor',
+                        ($data['supplier_type'] ?? 'area_distributor') === 'mega_dealer' ? ($data['mega_dealer_id'] ?? null) : ($data['ad_id'] ?? null),
+                        $data['supplier_source'] ?? 'admin_crms')
                     : $context->customers($user)->firstWhere('id', $data['client_id'] ?? null);
-                if (!$recipient) $this->invalid('recipient', 'The selected customer or Area Distributor is no longer assigned to this account. Refresh and review the saved order.');
+                if (!$recipient) $this->invalid('recipient', 'The selected customer or supplier is no longer assigned to this account. Refresh and review the saved order.');
+                $products = ($data['type'] === 'order' ? $context->supplierProducts($user, $recipient)
+                    : $context->products($user, $suppliers))->keyBy('id');
                 $checked = [];
                 foreach ($data['items'] as $item) {
                     $product = $products->get($item['product_id']);
                     if (!$product) $this->invalid('items', 'A product is no longer available in your sales territory. Refresh and review the saved order.');
-                    if ($data['type'] === 'order' && (int) $product->ad_user_id !== (int) $recipient->user_id) {
+                    if ($data['type'] === 'order' && ($data['supplier_type'] ?? 'area_distributor') !== 'mega_dealer' && (int) $product->ad_user_id !== (int) $recipient->user_id) {
                         $this->invalid('items', $product->product_name . ': this product does not belong to the selected Area Distributor.');
                     }
                     $price = $data['type'] === 'order' ? $context->orderPrice($product, $user) : $context->clientPrice($product, $user);
@@ -94,7 +113,7 @@ class OfflineOrderController extends Controller
                             $this->invalid('items', $product->product_name . ': quantity exceeds your current available stock.');
                         }
                     }
-                    // AD orders are requests for supply. Zero AD inventory never
+                    // Supplier orders are requests for supply. Zero inventory never
                     // blocks them or marks them delivered; every order stays Pending.
                     $checked[] = [$product, (int) $item['quantity'], $price];
                 }
@@ -107,7 +126,7 @@ class OfflineOrderController extends Controller
                     if ($data['type'] === 'order') $notifications[] = [$record, $recipient, $product, $user];
                 }
                 $result = ['success' => true, 'records' => $records, 'message' => $data['type'] === 'order'
-                    ? 'Order received by your Area Distributor and saved as pending fulfilment.' : 'Client transaction saved successfully.'];
+                    ? 'Order received by your supplier and saved as pending fulfilment.' : 'Client transaction saved successfully.'];
                 DB::table('offline_order_receipts')->where('idempotency_key', $data['idempotency_key'])
                     ->update(['response_json' => json_encode($result), 'updated_at' => date('Y-m-d H:i:s')]);
                 return $result;
@@ -125,10 +144,10 @@ class OfflineOrderController extends Controller
             try { $this->notifyDistributor(...$notification); }
             catch (\Throwable $error) {
                 $notificationFailed = true;
-                Log::warning('Offline AD order saved; email notification failed.', ['order_id' => $notification[0]->id]);
+                Log::warning('Offline supplier order saved; email notification failed.', ['order_id' => $notification[0]->id]);
             }
         }
-        if ($notificationFailed) $result['warning'] = 'Your order is saved. The distributor email notification could not be sent.';
+        if ($notificationFailed) $result['warning'] = 'Your order is saved. The supplier email notification could not be sent.';
         return new JsonResponse($result, 200, ['Cache-Control' => 'private, no-store']);
     }
 
@@ -152,7 +171,10 @@ class OfflineOrderController extends Controller
             'status' => $isOrder ? 'Pending' : 'Completed',
         ];
         if (!$isOrder) $attributes['transaction_id'] = 'TRX-' . time() . '-' . rand(1000, 9999);
-        if ($isOrder) $attributes += ['ad_id' => $recipient->id, 'ad_address' => $recipient->address ?? '', 'delivery_fee' => 0];
+        if ($isOrder) $attributes += ['ad_id' => ($data['supplier_type'] ?? 'area_distributor') === 'mega_dealer' ? null : $recipient->id,
+            'mega_dealer_id' => ($data['supplier_type'] ?? 'area_distributor') === 'mega_dealer' ? $recipient->id : null,
+            'mega_dealer_source' => ($data['supplier_type'] ?? 'area_distributor') === 'mega_dealer' ? $recipient->supplier_source : null,
+            'ad_address' => $recipient->address ?? '', 'delivery_fee' => 0];
         else $attributes += ['client_id' => $recipient->id, 'client_address' => $recipient->address ?? '',
             'points_client' => (float) $product->customer_points * $quantity, 'is_guest' => false];
         foreach ($attributes as $name => $value) {
@@ -190,9 +212,17 @@ class OfflineOrderController extends Controller
             return ['product_id' => (int) $item['product_id'], 'quantity' => (int) $item['quantity'], 'unit_price' => (float) $item['unit_price']];
         }, $data['items']);
         usort($items, function ($a, $b) { return $a['product_id'] <=> $b['product_id']; });
-        return hash('sha256', json_encode(['user_id' => (int) $data['user_id'], 'type' => $data['type'],
+        $identity = ['user_id' => (int) $data['user_id'], 'type' => $data['type'],
             'ad_id' => $data['type'] === 'order' ? (int) ($data['ad_id'] ?? 0) : null,
             'client_id' => $data['type'] === 'client' ? (int) ($data['client_id'] ?? 0) : null,
-            'payment_method' => $data['payment_method'], 'delivery_type' => $data['delivery_type'], 'items' => $items]));
+            'payment_method' => $data['payment_method'], 'delivery_type' => $data['delivery_type'], 'items' => $items];
+        // Existing AD drafts keep their original hash, including when a newer
+        // page sends the explicit default supplier type. MD IDs cannot alias ADs.
+        if ($data['type'] === 'order' && ($data['supplier_type'] ?? 'area_distributor') === 'mega_dealer') {
+            $identity['supplier_type'] = 'mega_dealer';
+            $identity['mega_dealer_id'] = (int) ($data['mega_dealer_id'] ?? 0);
+            if (($data['supplier_source'] ?? 'admin_crms') === 'dms_prei') $identity['supplier_source'] = 'dms_prei';
+        }
+        return hash('sha256', json_encode($identity));
     }
 }

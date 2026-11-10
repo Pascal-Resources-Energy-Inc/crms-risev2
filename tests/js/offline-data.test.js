@@ -115,6 +115,92 @@ test('AD orders can be queued above zero or insufficient AD stock', async () => 
     assert.equal(posts(h).length, 0);
 });
 
+test('Mega Dealer orders preserve their typed supplier and Dealer price through save and sync', async () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push({ id: 200, name: 'Same-area Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10], stock_by_product: { 10: 0 } });
+    const h = harness(memoryStore([saved]));
+    const draft = order({ type: 'order', supplier_type: 'mega_dealer', mega_dealer_id: 200, ad_id: null, client_id: null,
+        items: [{ product_id: 10, quantity: 50, unit_price: 50 }] });
+    const queued = await h.api.queueOrder(draft);
+    assert.equal(queued.recipient_name, 'Same-area Mega Dealer');
+    await h.api.sync();
+    const sent = JSON.parse(posts(h)[0].body);
+    assert.equal(sent.supplier_type, 'mega_dealer'); assert.equal(sent.mega_dealer_id, 200); assert.equal(sent.ad_id, null);
+    assert.equal(sent.items[0].unit_price, 50); assert.equal(sent.items[0].quantity, 50);
+});
+
+test('DMS Mega Dealer source survives offline validation, queueing and sync despite a colliding local ID', async () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push(
+        { id: 200, name: 'Local Mega Dealer', supplier_type: 'mega_dealer', product_ids: [11] },
+        { id: 200, name: 'DMS Mega Dealer', supplier_type: 'mega_dealer', supplier_source: 'dms_prei', product_ids: [10] }
+    );
+    const h = harness(memoryStore([saved]));
+    const draft = order({ type: 'order', supplier_type: 'mega_dealer', supplier_source: 'dms_prei', mega_dealer_id: 200, ad_id: null, client_id: null,
+        items: [{ product_id: 10, quantity: 2, unit_price: 50 }] });
+    const queued = await h.api.queueOrder(draft);
+    assert.equal(queued.recipient_name, 'DMS Mega Dealer'); assert.equal(queued.supplier_source, 'dms_prei');
+    await h.api.sync(); const sent = JSON.parse(posts(h)[0].body);
+    assert.equal(sent.supplier_source, 'dms_prei'); assert.equal(sent.mega_dealer_id, 200); assert.equal(sent.ad_id, null);
+    assert.throws(() => h.api.validateOrder(saved, { ...draft, supplier_source: 'admin_crms' }, draft.items), /selected supplier/);
+    saved.distributors = saved.distributors.filter(entry => entry.supplier_source !== 'dms_prei');
+    assert.throws(() => h.api.validateOrder(saved, draft, draft.items), /eligible/);
+});
+
+test('unknown Mega Dealer sources cannot be queued as default local suppliers', async () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push({ id: 200, name: 'Local Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10] });
+    const h = harness(memoryStore([saved]));
+    const draft = order({ type: 'order', supplier_type: 'mega_dealer', mega_dealer_id: 200, ad_id: null, client_id: null,
+        items: [{ product_id: 10, quantity: 2, unit_price: 50 }] });
+    for (const supplier_source of ['unknown', false, 0, {}]) await assert.rejects(h.api.queueOrder({ ...draft, supplier_source }), /eligible/);
+    assert.equal((await h.api.listOrders()).length, 0);
+    await h.api.queueOrder(draft); assert.equal((await h.api.listOrders())[0].supplier_source, undefined);
+});
+
+test('reviewing a rejected DMS Mega Dealer order preserves its source and never substitutes a local match', async () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push(
+        { id: 200, name: 'Local Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10] },
+        { id: 200, name: 'DMS Mega Dealer', supplier_type: 'mega_dealer', supplier_source: 'dms_prei', product_ids: [10] }
+    );
+    const h = harness(memoryStore([saved]));
+    await h.api.queueOrder(order({ type: 'order', supplier_type: 'mega_dealer', supplier_source: 'dms_prei', mega_dealer_id: 200, ad_id: null, client_id: null,
+        items: [{ product_id: 10, quantity: 2, unit_price: 50 }] }));
+    h.store.rows.get(firstKey).status = 'needs_review';
+    const review = await h.api.reviewOrder(firstKey);
+    assert.equal(review.context.supplier_source, 'dms_prei'); assert.equal(review.context.mega_dealer_id, 200);
+    assert.equal(review.context.retry_key, firstKey);
+    const latest = structuredClone(saved); latest.distributors = latest.distributors.filter(entry => entry.supplier_source !== 'dms_prei');
+    h.store.snapshots.set(42, latest);
+    const unavailable = await h.api.reviewOrder(firstKey, { replaceCart: true });
+    assert.equal(unavailable.context.supplier_source, 'dms_prei'); assert.equal(unavailable.context.mega_dealer_id, null);
+    assert.match(unavailable.context.review_issues.join(' '), /no longer available/);
+});
+
+test('Mega Dealer order validation rejects an unavailable supplier, a wrong role, or a mismatched product', () => {
+    const saved = snapshot(), h = harness(); saved.user.role = 'Dealer';
+    saved.distributors.push({ id: 200, name: 'Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10] });
+    const draft = order({ type: 'order', supplier_type: 'mega_dealer', mega_dealer_id: 200, ad_id: null, client_id: null });
+    assert.throws(() => h.api.validateOrder(saved, { ...draft, mega_dealer_id: 999 }, draft.items), /eligible/);
+    assert.throws(() => h.api.validateOrder(saved, { ...draft, ad_id: 200 }, draft.items), /Only Dealers/);
+    assert.throws(() => h.api.validateOrder(saved, draft, [{ product_id: 11, quantity: 1, unit_price: 75 }]), /selected supplier/);
+    saved.user.role = 'Mega Dealer';
+    assert.throws(() => h.api.validateOrder(saved, draft, draft.items), /Only Dealers/);
+});
+
+test('reviewing a rejected Mega Dealer order keeps its supplier and retry reference', async () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push({ id: 200, name: 'Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10] });
+    const h = harness(memoryStore([saved]));
+    const draft = order({ type: 'order', supplier_type: 'mega_dealer', mega_dealer_id: 200, ad_id: null, client_id: null,
+        items: [{ product_id: 10, quantity: 2, unit_price: 50 }] });
+    await h.api.queueOrder(draft); h.store.rows.get(firstKey).status = 'needs_review';
+    const review = await h.api.reviewOrder(firstKey);
+    assert.equal(review.context.supplier_type, 'mega_dealer'); assert.equal(review.context.mega_dealer_id, 200);
+    assert.equal(review.context.ad_id, null); assert.equal(review.context.retry_key, firstKey);
+});
+
 test('client transactions remain limited to the saved dealer stock', async () => {
     const h = harness();
     await assert.rejects(h.api.queueOrder(order({ items: [{ product_id: 10, quantity: 9, unit_price: 70 }] })), /stock|available/i);

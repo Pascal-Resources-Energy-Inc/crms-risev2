@@ -164,13 +164,25 @@
         sameAccount(id);
         return withReservations(validateSnapshot(data, id), rows);
     }
+    function orderSupplier(snapshot, context) {
+        const type = context.supplier_type || 'area_distributor';
+        if (!['area_distributor', 'mega_dealer'].includes(type) || type === 'area_distributor' && context.mega_dealer_id) return null;
+        const sourceOf = value => value.supplier_source == null || value.supplier_source === '' ? 'admin_crms' : value.supplier_source;
+        const source = sourceOf(context);
+        if (type === 'mega_dealer' && !['admin_crms', 'dms_prei'].includes(source)) return null;
+        const id = type === 'mega_dealer' ? context.mega_dealer_id : context.ad_id;
+        return (snapshot.distributors || []).find(entry => (entry.supplier_type || 'area_distributor') === type && String(entry.supplier_id || entry.id) === String(id) &&
+            (type !== 'mega_dealer' || sourceOf(entry) === source));
+    }
     function validateOrder(snapshot, context, items) {
         if (!snapshot || !context || Number(context.user_id) !== Number(snapshot.user.id)) throw new Error('Open Products to start a cart for this account.');
         if (!['client', 'order'].includes(context.type)) throw new Error('Choose the transaction type in Products.');
         if (!snapshot.settings[context.type === 'order' ? 'can_order' : 'can_transact']) throw new Error('This account cannot create that transaction.');
-        const recipient = (context.type === 'order' ? snapshot.distributors : snapshot.customers)
-            .find(entry => String(entry.id) === String(context.type === 'order' ? context.ad_id : context.client_id));
-        if (!recipient) throw new Error('Choose an eligible customer or Area Distributor in Products.');
+        const recipient = context.type === 'order' ? orderSupplier(snapshot, context)
+            : snapshot.customers.find(entry => String(entry.id) === String(context.client_id));
+        if (!recipient) throw new Error('Choose an eligible customer or supplier in Products.');
+        const megaSupplier = context.type === 'order' && (context.supplier_type || 'area_distributor') === 'mega_dealer';
+        if (megaSupplier && (String(snapshot.user.role || '').toLowerCase().replace(/[\s_-]+/g, '') !== 'dealer' || context.ad_id)) throw new Error('Only Dealers can order from an eligible Mega Dealer.');
         if (!Array.isArray(items) || !items.length || items.length > 100) throw new Error('Your cart must contain between 1 and 100 products.');
         const seen = new Set();
         const checked = items.map(item => {
@@ -178,7 +190,9 @@
             const product = snapshot.products.find(entry => Number(entry.id) === id);
             if (!product || seen.has(id)) throw new Error('A cart product is unavailable. Review Products.');
             seen.add(id);
-            if (context.type === 'order' && String(product.ad_id) !== String(context.ad_id)) throw new Error('A product does not belong to the selected Area Distributor.');
+            if (context.type === 'order' && (megaSupplier
+                ? !Array.isArray(recipient.product_ids) || !recipient.product_ids.some(value => Number(value) === id)
+                : String(product.ad_id) !== String(context.ad_id))) throw new Error('A product does not belong to the selected supplier.');
             if (context.type === 'client' && !product.client_allowed) throw new Error(product.name + ' is unavailable for client transactions.');
             if (!Number.isSafeInteger(quantity) || quantity < 1 || quantity > 1000000) throw new Error(product.name + ': enter a whole quantity from 1 to 1,000,000.');
             if (context.type === 'client' && (!Number.isFinite(Number(product.dealer_stock)) || quantity > Number(product.dealer_stock))) throw new Error(product.name + ': quantity exceeds your available saved stock.');
@@ -254,13 +268,17 @@
         const snapshot = await getSnapshot();
         if (!snapshot) throw new Error('Update offline data before reviewing this order.');
         const issues = [], recipients = row.type === 'order' ? snapshot.distributors : snapshot.customers;
-        const recipient = recipients.find(entry => String(entry.id) === String(row.type === 'order' ? row.ad_id : row.client_id));
+        const recipient = row.type === 'order' ? orderSupplier(snapshot, row) : recipients.find(entry => String(entry.id) === String(row.client_id));
         if (!recipient) issues.push('Choose an eligible recipient in Products. The original recipient is no longer available.');
         const context = {
-            user_id: id, type: row.type, ad_id: row.type === 'order' && recipient ? recipient.id : null,
+            user_id: id, type: row.type, ad_id: row.type === 'order' && recipient && row.supplier_type !== 'mega_dealer' ? recipient.id : null,
             client_id: row.type === 'client' && recipient ? recipient.id : null, retry_key: key,
             payment_method: row.payment_method, delivery_type: row.delivery_type, snapshot_saved_at: snapshot.saved_at, review_issues: issues
         };
+        if (row.supplier_type === 'mega_dealer') {
+            context.supplier_type = 'mega_dealer'; context.mega_dealer_id = recipient ? (recipient.supplier_id || recipient.id) : null;
+            if (row.supplier_source) context.supplier_source = row.supplier_source;
+        }
         const items = row.items.map(item => {
             const product = snapshot.products.find(entry => String(entry.id) === String(item.product_id));
             if (!product) { issues.push(item.name + ' is no longer available. Remove it from your cart.'); return Object.assign({}, item, { id: item.product_id, price: item.unit_price, unavailable: true }); }

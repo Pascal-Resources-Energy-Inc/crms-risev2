@@ -14,6 +14,10 @@
 Route::get('/', 'HomeController@index')->name('home');
 Route::get('/dashboard', 'HomeController@index')->name('dashboard');
 Route::get('/home', 'HomeController@index')->name('home');
+Route::get('/api/mega-dealer/orders/received', 'ReceivedDealerOrderController@index')
+    ->middleware('auth')->name('received.dealer.orders');
+Route::post('/mega-dealer/orders/{id}/fulfil', 'ReceivedDealerOrderController@fulfil')
+    ->middleware('auth')->name('received.dealer.orders.fulfil');
 Route::get('/notification', 'NotificationController@index')->name('notification');
 Route::post('/notifications/{id}/mark-viewed', 'NotificationController@markAsViewed')->name('notifications.markViewed');
 Route::post('/notifications/mark-all-read', 'NotificationController@markAllAsRead')->name('notifications.markAllRead');

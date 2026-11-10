@@ -8,6 +8,30 @@
     const MAX_QUANTITY = 1000000;
     const money = value => new Intl.NumberFormat('en-PH', { style: 'currency', currency: 'PHP' }).format(value);
     const idOf = item => String(item.product_id || item.id);
+    const supplierType = value => value.supplier_type || 'area_distributor';
+    const supplierSource = value => value.supplier_source == null || value.supplier_source === '' ? 'admin_crms' : value.supplier_source;
+    const validSource = value => ['admin_crms', 'dms_prei'].includes(supplierSource(value));
+    const supplierKey = value => supplierType(value) === 'mega_dealer'
+        ? 'mega_dealer:' + (supplierSource(value) === 'dms_prei' ? 'dms_prei:' : '') + (value.supplier_id || value.id)
+        : String(value.supplier_id || value.id);
+    function suppliersFor(snapshot, type) {
+        const dealer = String(snapshot.user.role || '').toLowerCase().replace(/[\s_-]+/g, '') === 'dealer';
+        return snapshot.distributors.filter(entry => supplierType(entry) === type && (type !== 'mega_dealer' || dealer && validSource(entry)));
+    }
+    function selectedSupplier(snapshot, context) {
+        const type = supplierType(context), id = type === 'mega_dealer' ? context.mega_dealer_id : context.ad_id;
+        if (type === 'mega_dealer' && !validSource(context)) return null;
+        return suppliersFor(snapshot, type).find(entry => String(entry.supplier_id || entry.id) === String(id) &&
+            (type !== 'mega_dealer' || supplierSource(entry) === supplierSource(context)));
+    }
+    function supplierContext(context, value) {
+        const selected = /^mega_dealer:(?:(dms_prei):)?([1-9]\d*)$/.exec(String(value || ''));
+        const next = Object.assign({}, context, { supplier_type: selected ? 'mega_dealer' : 'area_distributor',
+            ad_id: selected ? null : Number(value) || null, mega_dealer_id: selected ? Number(selected[2]) : null, client_id: null });
+        delete next.supplier_source;
+        if (selected && selected[1]) next.supplier_source = 'dms_prei';
+        return next;
+    }
     function itemFor(product, type, quantity) {
         const count = Number(quantity), rawPrice = type === 'order' ? product.order_price : product.price;
         if (!Number.isSafeInteger(count) || count < 1 || count > MAX_QUANTITY) throw new Error('Enter a whole quantity from 1 to 1,000,000.');
@@ -16,7 +40,12 @@
         return { id: product.id, product_id: product.id, name: product.name, description: product.description || '', sku: product.sku || '', image: product.image || null, quantity: count, price: Number(rawPrice), unit_price: Number(rawPrice) };
     }
     function productsFor(snapshot, context, query) {
-        return snapshot.products.filter(product => (context.type === 'order' ? String(product.ad_id) === String(context.ad_id) : product.client_allowed) && (String(product.name || '') + ' ' + String(product.sku || '')).toLowerCase().includes(String(query || '').toLowerCase().trim()));
+        const supplier = context.type === 'order' ? selectedSupplier(snapshot, context) : null;
+        return snapshot.products.filter(product => (context.type === 'order'
+            ? supplier && (supplierType(supplier) === 'mega_dealer'
+                ? Array.isArray(supplier.product_ids) && supplier.product_ids.some(id => String(id) === String(product.id))
+                : String(product.ad_id) === String(context.ad_id))
+            : product.client_allowed) && (String(product.name || '') + ' ' + String(product.sku || '')).toLowerCase().includes(String(query || '').toLowerCase().trim()));
     }
     function read(storage, key, fallback) { const raw = storage.getItem(key); return raw === null ? fallback : JSON.parse(raw); }
     function commit(storage, changes) {
@@ -37,7 +66,7 @@
         if (!api || !viewer) {
             const message = api ? 'Sign in online before preparing the offline catalog.' : 'The offline data files are not ready. Connect and update the offline version before creating an order.';
             notice(message); byId('productGrid').replaceChildren(node('p', 'empty', message));
-            ['clientMode', 'orderMode', 'customerSelect', 'distributorSelect', 'refreshData', 'startNewCart'].forEach(id => { byId(id).disabled = true; });
+            ['clientMode', 'orderMode', 'customerSelect', 'distributorSelect', 'supplierAD', 'supplierMega', 'refreshData', 'startNewCart'].forEach(id => { if (byId(id)) byId(id).disabled = true; });
             return;
         }
         function badge() { byId('cartCount').textContent = String(cart.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0)); }
@@ -59,9 +88,11 @@
             } catch (error) { locked = true; context = initialContext(); notice(error.message || 'The current cart cannot be read. Choose New cart to replace it when ready.'); }
             badge();
         }
-        function recipients(select, values, empty, current) {
+        function recipients(select, values, empty, current, suppliers) {
             select.replaceChildren(); const placeholder = node('option', '', empty); placeholder.value = ''; select.append(placeholder);
-            values.forEach(recipient => { const option = node('option', '', recipient.display_name || recipient.name || 'Unnamed account'); option.value = recipient.id; select.append(option); });
+            values.forEach(recipient => { const label = recipient.display_name || recipient.name || 'Unnamed account';
+                const option = node('option', '', (suppliers ? (supplierType(recipient) === 'mega_dealer' ? 'Mega Dealer · ' : 'Area Distributor · ') : '') + label);
+                option.value = suppliers ? supplierKey(recipient) : recipient.id; select.append(option); });
             select.value = current === null || current === undefined ? '' : String(current);
         }
         function controls() {
@@ -69,27 +100,52 @@
             byId('clientMode').disabled = locked || !snapshot.settings.can_transact; byId('orderMode').disabled = locked || !snapshot.settings.can_order;
             byId('clientMode').checked = context.type === 'client'; byId('orderMode').checked = context.type === 'order';
             byId('customerField').hidden = context.type !== 'client'; byId('distributorField').hidden = context.type !== 'order';
-            recipients(byId('customerSelect'), snapshot.customers, 'Select customer', context.client_id); recipients(byId('distributorSelect'), snapshot.distributors, 'Select Area Distributor', context.ad_id);
+            recipients(byId('customerSelect'), snapshot.customers, 'Select customer', context.client_id);
+            const type = supplierType(context), mega = type === 'mega_dealer', eligible = suppliersFor(snapshot, type);
+            const currentSupplier = mega ? selectedSupplier(snapshot, context) : null;
+            recipients(byId('distributorSelect'), eligible, mega ? 'Select Mega Dealer' : 'Select Area Distributor', mega ? currentSupplier ? supplierKey(currentSupplier) : '' : context.ad_id, true);
             byId('customerSelect').disabled = locked || !snapshot.settings.can_transact; byId('distributorSelect').disabled = locked || !snapshot.settings.can_order;
+            const adChoice = byId('supplierAD'), megaChoice = byId('supplierMega'), help = byId('supplierTypeHelp');
+            if (adChoice) { adChoice.checked = !mega; adChoice.disabled = locked || !snapshot.settings.can_order || !suppliersFor(snapshot, 'area_distributor').length; }
+            if (megaChoice) { megaChoice.checked = mega; megaChoice.disabled = locked || !snapshot.settings.can_order || !suppliersFor(snapshot, 'mega_dealer').length; }
+            if (help) help.textContent = String(snapshot.user.role || '').toLowerCase().replace(/[\s_-]+/g, '') !== 'dealer'
+                ? 'Mega Dealer ordering is available to Dealer accounts.' : !suppliersFor(snapshot, 'mega_dealer').length
+                    ? 'No eligible Mega Dealer is available in your area. You can order from an assigned AD.'
+                    : mega ? 'Select a Mega Dealer in your sales area.' : 'Select an Area Distributor assigned to your sales area.';
             byId('snapshotTime').textContent = 'Last saved: ' + new Date(snapshot.saved_at).toLocaleString(); badge();
         }
         function choose(next) {
             if (locked) return;
-            const changed = ['type', 'client_id', 'ad_id'].some(key => String(context[key] || '') !== String(next[key] || ''));
+            const changed = ['type', 'client_id', 'ad_id', 'mega_dealer_id'].some(key => String(context[key] || '') !== String(next[key] || '')) ||
+                supplierType(context) !== supplierType(next) || supplierSource(context) !== supplierSource(next);
             if (changed && cart.length && !win.confirm('Changing the transaction or recipient replaces this unsent cart. Pending saved transactions are kept. Continue?')) { controls(); return; }
             if (saveCart(changed ? [] : cart, next)) { notice(''); controls(); render(); }
+        }
+        function chooseSupplierType(type) {
+            if (!context || !snapshot || locked) return;
+            if (type === 'mega_dealer' && !suppliersFor(snapshot, type).length) { notice('No eligible Mega Dealer is available for this account in your area.'); controls(); return; }
+            const eligible = suppliersFor(snapshot, type), current = supplierType(context) === type ? selectedSupplier(snapshot, context) : null;
+            if (type === 'mega_dealer' && supplierType(context) === type && context.mega_dealer_id && !current) {
+                notice('Your previously selected Mega Dealer is unavailable. Choose an eligible supplier before continuing.'); controls(); render(); return;
+            }
+            const selected = current || (eligible.length === 1 ? eligible[0] : null);
+            const next = supplierContext(context, selected ? supplierKey(selected) : '');
+            next.supplier_type = type;
+            choose(next);
         }
         function render() {
             const grid = byId('productGrid'); grid.replaceChildren();
             if (!snapshot || !context) { grid.append(node('p', 'empty', 'No saved catalog yet. Connect, sign in online, and refresh saved data.')); return; }
             if (!snapshot.settings[context.type === 'order' ? 'can_order' : 'can_transact']) { grid.append(node('p', 'empty', 'This transaction is unavailable for your account.')); return; }
-            if (context.type === 'order' && !context.ad_id) { grid.append(node('p', 'empty', snapshot.distributors.length ? 'Select an Area Distributor to see products you can order.' : 'No Area Distributor is assigned to your saved sales territory. Refresh while connected.')); return; }
+            const supplier = context.type === 'order' ? selectedSupplier(snapshot, context) : null;
+            if (context.type === 'order' && !supplier) { grid.append(node('p', 'empty', snapshot.distributors.length ? 'Select a supplier to see products you can order.' : 'No supplier is assigned to your saved sales territory. Refresh while connected.')); return; }
             const products = productsFor(snapshot, context, byId('productSearch').value);
             products.forEach(product => {
                 const card = node('article', 'product'), image = node('div', 'image', 'No image saved');
                 if (product.image) { const img = node('img'); try { const url = new URL(product.image, win.location.href); if (['http:', 'https:'].includes(url.protocol)) { img.src = url.href; img.alt = product.name; img.loading = 'lazy'; img.onerror = () => image.replaceChildren(node('span', '', 'No image saved')); image.replaceChildren(img); } } catch (_) {} }
-                const order = context.type === 'order', available = Number(order ? product.ad_stock : product.dealer_stock) || 0;
-                const stock = node('div', 'stock' + (order && available < 1 ? ' backorder' : ''), order ? (available > 0 ? 'AD stock: ' + available + ' · Orders accepted' : 'Out of stock · Available to order') : 'Available stock: ' + available);
+                const order = context.type === 'order', mega = supplier && supplierType(supplier) === 'mega_dealer';
+                const available = Number(order ? mega ? (supplier.stock_by_product || {})[product.id] : product.ad_stock : product.dealer_stock) || 0;
+                const stock = node('div', 'stock' + (order && available < 1 ? ' backorder' : ''), order ? (available > 0 ? (mega ? 'Mega Dealer stock: ' : 'AD stock: ') + available + ' · Orders accepted' : 'Out of stock · Available to order') : 'Available stock: ' + available);
                 const rawPrice = order ? product.order_price : product.price, priced = rawPrice !== null && rawPrice !== '' && Number.isFinite(Number(rawPrice)) && Number(rawPrice) >= 0;
                 const actions = node('div', 'actions'), button = node('button', 'button primary'); button.type = 'button';
                 const existing = cart.find(item => idOf(item) === String(product.id)); button.textContent = existing ? 'Edit · ' + existing.quantity : 'Add'; button.setAttribute('aria-label', (existing ? 'Edit ' : 'Add ') + product.name);
@@ -100,9 +156,9 @@
         }
         function openQuantity(product) {
             if (locked) return;
-            if (!(context.type === 'order' ? context.ad_id : context.client_id)) { notice('Select a customer or Area Distributor before adding products.'); return; }
+            if (!(context.type === 'order' ? selectedSupplier(snapshot, context) : context.client_id)) { notice('Select a customer or supplier before adding products.'); return; }
             editing = product; const existing = cart.find(item => idOf(item) === String(product.id)), order = context.type === 'order';
-            byId('quantityTitle').textContent = product.name; byId('quantityAvailability').textContent = order ? 'AD orders can exceed available stock. Your order remains pending until accepted and fulfilled.' : 'Available saved stock: ' + product.dealer_stock;
+            byId('quantityTitle').textContent = product.name; byId('quantityAvailability').textContent = order ? 'Supplier orders can exceed available stock. Your order remains pending until accepted and fulfilled.' : 'Available saved stock: ' + product.dealer_stock;
             byId('productQuantity').max = order ? MAX_QUANTITY : Math.max(1, Number(product.dealer_stock) || 0); byId('productQuantity').value = existing ? existing.quantity : 1;
             byId('saveQuantity').textContent = existing ? 'Update cart item' : 'Add to cart'; byId('removeItem').hidden = !existing; byId('quantityError').hidden = true;
             total(); byId('quantityDialog').showModal(); byId('productQuantity').focus();
@@ -112,15 +168,29 @@
             const current = ++generation;
             try {
                 const saved = await api.getSnapshot(); if (current !== generation) return;
-                if (!saved) { render(); notice('Connect and sign in online to prepare the latest products, customers and assigned Area Distributors.'); return; }
+                if (!saved) { render(); notice('Connect and sign in online to prepare the latest products, customers and eligible suppliers.'); return; }
                 const first = !snapshot; snapshot = saved; if (first) initializeCart(); controls(); render();
-                if (!locked && (!initial || first)) notice(cart.length ? 'Saved data updated. Review cart prices and availability before confirming.' : 'Latest products, customers and Area Distributors are saved for offline use.');
+                if (!locked && (!initial || first)) notice(cart.length ? 'Saved data updated. Review cart prices and availability before confirming.' : 'Latest products, customers and eligible suppliers are saved for offline use.');
             } catch (error) { notice(error.message || 'Unable to read saved data. Your cart and pending transactions are kept.'); }
         }
-        byId('clientMode').onchange = () => { if (context) choose(Object.assign({}, context, { type: 'client', client_id: null, ad_id: null })); };
-        byId('orderMode').onchange = () => { if (context && snapshot) choose(Object.assign({}, context, { type: 'order', client_id: null, ad_id: snapshot.distributors.length === 1 ? snapshot.distributors[0].id : null })); };
-        byId('customerSelect').onchange = () => { if (context) choose(Object.assign({}, context, { client_id: byId('customerSelect').value || null, ad_id: null })); };
-        byId('distributorSelect').onchange = () => { if (context) choose(Object.assign({}, context, { ad_id: byId('distributorSelect').value || null, client_id: null })); };
+        byId('clientMode').onchange = () => { if (context) choose(Object.assign({}, context, { type: 'client', client_id: null, ad_id: null, mega_dealer_id: null, supplier_type: 'area_distributor', supplier_source: undefined })); };
+        byId('orderMode').onchange = () => { if (context && snapshot) {
+            const type = context.type === 'order' ? supplierType(context) : 'area_distributor';
+            const eligible = suppliersFor(snapshot, type), current = context.type === 'order' ? selectedSupplier(snapshot, context) : null;
+            if (type === 'mega_dealer' && context.mega_dealer_id && !current) {
+                notice('Your previously selected Mega Dealer is unavailable. Choose an eligible supplier before continuing.'); controls(); render(); return;
+            }
+            const first = current || (eligible.length === 1 ? eligible[0] : null);
+            const next = supplierContext(Object.assign({}, context, { type: 'order' }), first ? supplierKey(first) : ''); next.supplier_type = type; choose(next);
+        } };
+        byId('customerSelect').onchange = () => { if (context) choose(Object.assign({}, context, { client_id: byId('customerSelect').value || null, ad_id: null, mega_dealer_id: null, supplier_type: 'area_distributor', supplier_source: undefined })); };
+        byId('distributorSelect').onchange = () => { if (context) {
+            const value = byId('distributorSelect').value, next = supplierContext(context, value);
+            if (value && supplierType(next) !== supplierType(context)) { controls(); return; }
+            choose(next);
+        } };
+        if (byId('supplierAD')) byId('supplierAD').onchange = () => chooseSupplierType('area_distributor');
+        if (byId('supplierMega')) byId('supplierMega').onchange = () => chooseSupplierType('mega_dealer');
         byId('productSearch').oninput = render;
         byId('refreshData').onclick = async () => { byId('refreshData').disabled = true; try { await api.refresh(); } catch (error) { notice(error.message); } finally { byId('refreshData').disabled = false; } };
         byId('startNewCart').onclick = () => { if (snapshot && win.confirm('Replace the current unsent cart with a new empty cart? Pending transactions are kept.') && saveCart([], initialContext())) { notice('New cart ready. Select the transaction type and recipient.'); controls(); render(); } };

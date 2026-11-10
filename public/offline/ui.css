@@ -2,6 +2,14 @@
     --ink: #173449; --muted: #61788b; --blue: #087ba7; --cyan: #24b8d6;
     --line: #dce7ee; --surface: #fff; --background: #f2f7fb;
 }
+.offline-app .supplier-type-options { margin: 0 0 10px; padding: 13px; border: 1px solid var(--line); border-radius: 12px; min-width: 0; background: #f7fbfd; }
+.offline-app .supplier-type-options legend { width: auto; padding: 0 5px; margin: 0; font-size: 12px; font-weight: 700; }
+.offline-app .supplier-type-choices { display: flex; flex-wrap: wrap; gap: 8px; }
+.offline-app .supplier-type-choices label { display: flex; flex: 1 1 160px; align-items: center; gap: 8px; min-height: 46px; padding: 10px; border: 1px solid #cadde8; border-radius: 10px; cursor: pointer; background: #fff; }
+.offline-app .supplier-type-choices label:has(input:checked) { background: #eaf7fc; border-color: var(--blue); color: var(--blue); }
+.offline-app .supplier-type-choices label:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+.offline-app .supplier-type-choices input { accent-color: var(--blue); }
+.offline-app .supplier-type-options small { display: block; margin-top: 8px; line-height: 1.5; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 .offline-app { margin: 0; padding-bottom: calc(104px + env(safe-area-inset-bottom)); background: var(--background); color: var(--ink); font: 15px/1.55 system-ui, sans-serif; }

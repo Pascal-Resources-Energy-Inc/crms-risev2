@@ -106,6 +106,60 @@ test('old synced rows recover PRORD and TRX references from typed receipt histor
     assert.doesNotMatch(h.node('activityList').textContent, /Device reference|00000000-0000/);
 });
 
+test('Mega Dealer order history resolves the typed supplier and keeps its name after supplier removal', async () => {
+    const saved = snapshot(); saved.distributors.push({ id: 200, name: 'Same-area Mega Dealer', supplier_type: 'mega_dealer' });
+    const row = queued({ supplier_type: 'mega_dealer', mega_dealer_id: 200, ad_id: null, status: 'synced', recipient_name: null,
+        result: { records: [{ id: 123, transaction_id: 'PRORD-0123', status: 'Pending' }] } });
+    const h = setup('history', saved, [row]); workspace.mount(h.win); await settle();
+    assert.match(h.node('activityList').textContent, /Mega Dealer Order · Same-area Mega Dealer/);
+    assert.doesNotMatch(h.node('activityList').textContent, /AD Order · Assigned AD/);
+    const next = snapshot(); next.orders = [{ id: 123, supplier_type: 'mega_dealer', mega_dealer_id: 200, ad_id: null,
+        supplier_name: 'Historical Mega Dealer', transaction_id: 'PRORD-0123', status: 'Pending' }];
+    h.setQueue([]); h.setSnapshot(next); await h.event('offline-data-updated');
+    assert.match(h.node('activityList').textContent, /Mega Dealer Order · Historical Mega Dealer/);
+});
+
+test('queued DMS and local Mega Dealer history names remain separate when supplier IDs collide', async () => {
+    const saved = snapshot();
+    saved.distributors.push(
+        { id: 'mega_dealer:200', supplier_id: 200, name: 'Local Mega Dealer', supplier_type: 'mega_dealer' },
+        { id: 'mega_dealer:dms_prei:200', supplier_id: 200, name: 'DMS Mega Dealer', supplier_type: 'mega_dealer', supplier_source: 'dms_prei' }
+    );
+    const dms = queued({ supplier_type: 'mega_dealer', supplier_source: 'dms_prei', mega_dealer_id: 200, ad_id: null, recipient_name: null });
+    const local = queued({ supplier_type: 'mega_dealer', mega_dealer_id: 200, ad_id: null, recipient_name: null,
+        idempotency_key: '00000000-0000-4000-8000-000000000002' });
+    const h = setup('history', saved, [dms, local]); workspace.mount(h.win); await settle();
+    const headers = h.node('activityList').children.map(card => card.children[0].children[0].textContent);
+    assert.deepEqual(headers, ['Mega Dealer Order · DMS Mega Dealer', 'Mega Dealer Order · Local Mega Dealer']);
+    const next = structuredClone(saved); next.distributors = next.distributors.filter(row => row.supplier_source !== 'dms_prei');
+    h.setSnapshot(next); await h.event('offline-data-updated');
+    const afterRemoval = h.node('activityList').children.map(card => card.children[0].children[0].textContent);
+    assert.deepEqual(afterRemoval, ['Mega Dealer Order · Mega Dealer', 'Mega Dealer Order · Local Mega Dealer']);
+});
+
+test('unknown Mega Dealer sources cannot borrow a local supplier name in queued history', async () => {
+    const saved = snapshot(); saved.distributors.push({ id: 200, name: 'Local Mega Dealer', supplier_type: 'mega_dealer' });
+    for (const supplier_source of ['unknown', false, 0, {}]) {
+        const h = setup('history', saved, [queued({ supplier_type: 'mega_dealer', supplier_source, mega_dealer_id: 200, ad_id: null, recipient_name: null })]);
+        workspace.mount(h.win); await settle();
+        assert.doesNotMatch(h.node('activityList').textContent, /Local Mega Dealer/);
+        assert.match(h.node('activityList').textContent, /Mega Dealer Order · Mega Dealer/);
+    }
+});
+
+test('server-resolved and queued cached DMS supplier names survive directory removal', async () => {
+    const saved = snapshot();
+    saved.distributors.push({ id: 200, name: 'Local Mega Dealer', supplier_type: 'mega_dealer' });
+    saved.orders = [{ id: 123, supplier_type: 'mega_dealer', supplier_source: 'dms_prei', mega_dealer_id: 200, ad_id: null,
+        supplier_name: 'Historical DMS Supplier', transaction_id: 'PRORD-0123', status: 'For Verification' }];
+    const h = setup('history', saved, [queued({ supplier_type: 'mega_dealer', supplier_source: 'dms_prei', mega_dealer_id: 200, ad_id: null,
+        recipient_name: 'Saved DMS Recipient' })]);
+    workspace.mount(h.win); await settle();
+    assert.match(h.node('activityList').textContent, /Mega Dealer Order · Historical DMS Supplier/);
+    assert.match(h.node('activityList').textContent, /Mega Dealer Order · Saved DMS Recipient/);
+    assert.doesNotMatch(h.node('activityList').textContent, /Local Mega Dealer/);
+});
+
 test('a client acknowledgement immediately replaces its device reference before server history refreshes', async () => {
     const row = queued({ type: 'client', client_id: 100 }), h = setup('history', snapshot(), [row]);
     workspace.mount(h.win); await settle(); assert.match(h.node('activityList').textContent, /Device reference/);

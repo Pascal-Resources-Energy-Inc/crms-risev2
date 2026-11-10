@@ -9,6 +9,59 @@ function confirmationHarness() {
     return harness(confirmationIds, { dealerOrderData: draft, offlineCartContext: context(), dealerCartData: [item()] });
 }
 
+test('a Mega Dealer cart keeps the typed supplier through confirmation and durable save', async () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push({ id: 200, name: 'Same-area Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10] });
+    const selected = context({ ad_id: null, mega_dealer_id: 200, supplier_type: 'mega_dealer' });
+    assert.equal(checkout.sameContext(selected, context()), false);
+    const h = harness(cartIds, { offlineCartContext: selected, dealerCartData: [item()] }, saved);
+    h.api.validateOrder = require('../../public/offline/data.js')(h.win, {}).validateOrder;
+    checkout.mount(h.win); await settle();
+    assert.equal(h.node('recipientLabel').textContent, 'Mega Dealer');
+    assert.equal(h.node('recipientName').textContent, 'Same-area Mega Dealer');
+    await h.node('reviewOrder').onclick(); const draft = h.parsed('dealerOrderData');
+    assert.equal(draft.supplier_type, 'mega_dealer'); assert.equal(draft.mega_dealer_id, 200); assert.equal(draft.ad_id, null);
+    const confirmation = harness(confirmationIds, { dealerOrderData: draft, offlineCartContext: selected, dealerCartData: [item()] }, saved);
+    confirmation.api.validateOrder = require('../../public/offline/data.js')(confirmation.win, {}).validateOrder;
+    checkout.mount(confirmation.win); await settle(); await confirmation.node('saveOrder').onclick();
+    assert.equal(confirmation.queued[0].mega_dealer_id, 200); assert.equal(confirmation.queued[0].ad_id, null);
+    assert.equal(confirmation.queued[0].items[0].price, 50);
+});
+
+test('DMS Mega Dealer confirmation names the correct colliding supplier and retains its source through save', async () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push(
+        { id: 200, name: 'Local Mega Dealer', supplier_type: 'mega_dealer', product_ids: [10] },
+        { id: 200, name: 'DMS Mega Dealer', supplier_type: 'mega_dealer', supplier_source: 'dms_prei', product_ids: [10] }
+    );
+    const selected = context({ ad_id: null, mega_dealer_id: 200, supplier_type: 'mega_dealer', supplier_source: 'dms_prei' });
+    assert.equal(checkout.sameContext(selected, { ...selected, supplier_source: 'admin_crms' }), false);
+    assert.equal(checkout.sameContext({ ...selected, supplier_source: undefined }, { ...selected, supplier_source: 'admin_crms' }), true);
+    const h = harness(cartIds, { offlineCartContext: selected, dealerCartData: [item()] }, saved);
+    h.api.validateOrder = require('../../public/offline/data.js')(h.win, {}).validateOrder;
+    checkout.mount(h.win); await settle();
+    assert.equal(h.node('recipientName').textContent, 'DMS Mega Dealer');
+    await h.node('reviewOrder').onclick();
+    const draft = h.parsed('dealerOrderData'); assert.equal(draft.supplier_source, 'dms_prei');
+    const confirmation = harness(confirmationIds, { dealerOrderData: draft, offlineCartContext: selected, dealerCartData: [item()] }, saved);
+    confirmation.api.validateOrder = require('../../public/offline/data.js')(confirmation.win, {}).validateOrder;
+    checkout.mount(confirmation.win); await settle(); await confirmation.node('saveOrder').onclick();
+    assert.equal(confirmation.queued[0].supplier_source, 'dms_prei'); assert.equal(confirmation.queued[0].mega_dealer_id, 200);
+});
+
+test('changing only the Mega Dealer source in another tab prevents confirmation of a stale cart', async () => {
+    const saved = snapshot(); saved.user.role = 'Dealer';
+    saved.distributors.push({ id: 200, name: 'DMS Mega Dealer', supplier_type: 'mega_dealer', supplier_source: 'dms_prei', product_ids: [10] });
+    const selected = context({ ad_id: null, mega_dealer_id: 200, supplier_type: 'mega_dealer', supplier_source: 'dms_prei' });
+    const h = harness(cartIds, { offlineCartContext: selected, dealerCartData: [item()] }, saved);
+    h.api.validateOrder = require('../../public/offline/data.js')(h.win, {}).validateOrder;
+    checkout.mount(h.win); await settle();
+    h.storage.setItem('offlineCartContext', JSON.stringify({ ...selected, supplier_source: 'admin_crms' }));
+    await h.node('reviewOrder').onclick();
+    assert.match(h.node('checkoutNotice').textContent, /changed in another tab/);
+    assert.equal(h.storage.getItem('dealerOrderData'), null);
+});
+
 test('AD cart above zero stock reaches order review using its saved price and preferences', async () => {
     const h = cartHarness(); checkout.mount(h.win); await settle();
     assert.equal(h.node('reviewOrder').disabled, false);

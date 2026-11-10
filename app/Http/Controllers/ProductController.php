@@ -10,6 +10,7 @@ use App\Dealer;
 use App\OrderDetail;
 use App\TransactionDetail;
 use App\DealerStockRequest;
+use App\Support\OfflinePortalContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -327,6 +328,17 @@ class ProductController extends Controller
 
     private function getProductStockMaps($products, $selectedAdId = null)
     {
+        $user = auth()->user();
+        if ($user && $user->isDealerLike()) {
+            $context = new OfflinePortalContext;
+            [$dealer, $supplier] = $context->stockMaps($products, $user);
+            if (request('supplier_type') === 'mega_dealer') {
+                $megaDealer = $context->resolveOrderSupplier($user, 'mega_dealer', request('mega_dealer_id', request('supplier_id')), request('supplier_source', 'admin_crms'));
+                abort_unless($megaDealer, 403, 'Select a Mega Dealer in your sales area.');
+                foreach ($products as $product) $supplier[$product->id] = $context->supplierStock($product, $megaDealer);
+            }
+            return [collect($dealer), collect($supplier)->map(function ($quantity) { return ['stock' => (int) $quantity]; })];
+        }
         $productIds = $products->pluck('id')->filter()->values()->all();
         $productNames = $products->pluck('product_name')->filter()->values()->all();
         $productSkus = $products->pluck('sku')->filter()->values()->all();

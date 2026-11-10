@@ -63,6 +63,7 @@ class OfflineOrderSyncTest extends TestCase
             $schema->create($name, function ($t) {
                 $t->increments('id'); $t->integer('user_id'); $t->string('name'); $t->string('mfi')->nullable(); $t->string('area')->nullable();
                 $t->string('address')->nullable(); $t->string('number')->nullable(); $t->integer('serial_number')->nullable();
+                $t->string('status')->nullable(); $t->softDeletes();
                 $t->decimal('latitude', 10, 6)->nullable(); $t->decimal('longitude', 10, 6)->nullable(); $t->timestamps();
             });
         }
@@ -77,6 +78,7 @@ class OfflineOrderSyncTest extends TestCase
                 $t->string('payment_method')->nullable(); $t->string('delivery_type')->nullable(); $t->decimal('delivery_fee', 12, 2)->default(0); $t->boolean('is_guest')->default(false); $t->timestamps();
             });
         }
+        $schema->table('order_details', function ($t) { $t->integer('mega_dealer_id')->nullable()->index(); });
         $schema->create('redeemed_histories', function ($t) { $t->increments('id'); $t->integer('user_id'); $t->decimal('points_amount', 12, 2); });
         require_once __DIR__ . '/../../database/migrations/2026_10_28_000001_create_offline_order_receipts_table.php';
         (new CreateOfflineOrderReceiptsTable)->up();
@@ -125,6 +127,119 @@ class OfflineOrderSyncTest extends TestCase
         $request = Request::create('/api/offline/orders', 'POST', $payload ?: $this->payload());
         $request->setUserResolver(function () use ($userId) { return $userId ? User::find($userId) : null; });
         return $this->controller->store($request, $this->context)->getData(true);
+    }
+
+    private function megaDealerPayload($overrides = [])
+    {
+        return $this->payload(array_replace(['supplier_type' => 'mega_dealer', 'mega_dealer_id' => 1043, 'ad_id' => null], $overrides));
+    }
+
+    private function activateMegaDealer($overrides = [])
+    {
+        $this->db->table('mega_dealers')->where('id', 1043)->update(array_replace(['area' => ' north ', 'status' => 'Active', 'deleted_at' => null], $overrides));
+    }
+
+    public function test_dealer_can_sync_same_area_mega_dealer_backorder_with_distinct_supplier_identity()
+    {
+        $this->activateMegaDealer();
+        $this->db->table('order_details')->where('dealer_id', 43)->update(['qty' => 0]);
+        $result = $this->send($this->megaDealerPayload());
+        $saved = $this->db->table('order_details')->find($result['records'][0]['id']);
+        $this->assertNull($saved->ad_id); $this->assertEquals(1043, $saved->mega_dealer_id);
+        $this->assertSame('Pending', $saved->status); $this->assertEquals(30, $saved->qty); $this->assertEquals(50, $saved->price);
+        $this->assertSame('PRORD-' . str_pad((string) $saved->id, 4, '0', STR_PAD_LEFT), $saved->transaction_id);
+        $this->assertSame([['id' => 1043, 'user_id' => 43]], $this->controller->notificationRecipients);
+        $this->assertEquals(8, $this->context->dealerStock(\App\Product::find(10), 42));
+        $this->assertEquals(0, $this->context->dealerStock(\App\Product::find(10), 43));
+        $snapshot = (new OfflineSnapshotData($this->context))->build(User::find(42));
+        $this->assertSame('mega_dealer', $snapshot['orders'][0]['supplier_type']);
+        $this->assertEquals(1043, $snapshot['orders'][0]['mega_dealer_id']);
+        $this->assertSame('Example Profile', $snapshot['orders'][0]['supplier_name']);
+        $this->assertEquals($result, $this->send($this->megaDealerPayload()));
+        $this->assertSame(1, $this->controller->notifications);
+    }
+
+    public function test_mega_dealer_order_rejects_wrong_area_inactive_deleted_or_wrong_role_supplier()
+    {
+        foreach ([['area' => 'South'], ['status' => 'Inactive'], ['deleted_at' => '2026-01-01 00:00:00']] as $changes) {
+            $this->activateMegaDealer($changes);
+            try { $this->send($this->megaDealerPayload()); $this->fail('Expected supplier rejection'); }
+            catch (ValidationException $error) { $this->assertArrayHasKey('recipient', $error->errors()); }
+        }
+        $this->activateMegaDealer(); $this->db->table('users')->where('id', 43)->update(['role' => 'Dealer']);
+        try { $this->send($this->megaDealerPayload()); $this->fail('Expected supplier role rejection'); }
+        catch (ValidationException $error) { $this->assertArrayHasKey('recipient', $error->errors()); }
+        $this->assertSame(0, $this->db->table('offline_order_receipts')->count());
+    }
+
+    public function test_only_dealer_buyers_can_order_from_mega_dealers_and_ambiguous_recipients_are_rejected()
+    {
+        $this->activateMegaDealer();
+        foreach ([43, 44] as $buyer) {
+            try { $this->send($this->megaDealerPayload(['user_id' => $buyer]), $buyer); $this->fail('Expected buyer role rejection'); }
+            catch (ValidationException $error) { $this->assertArrayHasKey('recipient', $error->errors()); }
+        }
+        foreach ([$this->megaDealerPayload(['ad_id' => 200]), $this->megaDealerPayload(['supplier_type' => 'area_distributor']),
+            $this->megaDealerPayload(['type' => 'client', 'client_id' => 100]), $this->megaDealerPayload(['mega_dealer_id' => 999999])] as $payload) {
+            try { $this->send($payload); $this->fail('Expected recipient validation'); }
+            catch (ValidationException $error) { $this->assertArrayHasKey('recipient', $error->errors()); }
+        }
+        $this->assertSame(0, $this->db->table('offline_order_receipts')->count());
+    }
+
+    public function test_ad_and_mega_dealer_numeric_ids_cannot_alias_receipts_or_orders()
+    {
+        $this->db->table('users')->insert(['id' => 47, 'name' => 'Other Mega Dealer', 'email' => 'mega47@example.test', 'role' => 'Mega Dealer']);
+        $this->db->table('mega_dealers')->insert(['id' => 200, 'user_id' => 47, 'name' => 'Same Number Mega Dealer', 'area' => 'North', 'status' => 'Active']);
+        $ad = $this->send();
+        $this->assertSame($ad, $this->send($this->payload(['supplier_type' => 'area_distributor', 'mega_dealer_id' => null])));
+        try { $this->send($this->megaDealerPayload(['mega_dealer_id' => 200])); $this->fail('Expected typed reference conflict'); }
+        catch (HttpException $error) { $this->assertSame(409, $error->getStatusCode()); }
+        $md = $this->send($this->megaDealerPayload(['mega_dealer_id' => 200, 'idempotency_key' => '00000000-0000-4000-8000-000000000002']));
+        $adRow = $this->db->table('order_details')->find($ad['records'][0]['id']);
+        $mdRow = $this->db->table('order_details')->find($md['records'][0]['id']);
+        $this->assertEquals(200, $adRow->ad_id); $this->assertNull($adRow->mega_dealer_id);
+        $this->assertNull($mdRow->ad_id); $this->assertEquals(200, $mdRow->mega_dealer_id);
+        $this->assertSame(2, $this->db->table('offline_order_receipts')->count());
+    }
+
+    public function test_mega_dealer_orders_keep_dealer_prices_and_assigned_product_catalog()
+    {
+        $this->activateMegaDealer();
+        foreach ([['product_id' => 10, 'quantity' => 1, 'unit_price' => 45], ['product_id' => 12, 'quantity' => 1, 'unit_price' => 80]] as $item) {
+            try { $this->send($this->megaDealerPayload(['items' => [$item]])); $this->fail('Expected product validation'); }
+            catch (ValidationException $error) { $this->assertArrayHasKey('items', $error->errors()); }
+        }
+        $this->assertSame(0, $this->db->table('offline_order_receipts')->count());
+    }
+
+    public function test_snapshot_includes_typed_same_area_mega_dealer_catalog_only_for_dealers()
+    {
+        $this->activateMegaDealer();
+        $snapshot = (new OfflineSnapshotData($this->context))->build(User::find(42));
+        $this->assertSame([200, 1043], array_column($snapshot['distributors'], 'id'));
+        $megaDealer = $snapshot['distributors'][1];
+        $this->assertSame('mega_dealer', $megaDealer['supplier_type']);
+        $this->assertSame('mega_dealer:1043', $megaDealer['key']); $this->assertSame([10, 11], $megaDealer['product_ids']);
+        $this->assertEquals([10 => 8, 11 => 0], (array) $megaDealer['stock_by_product']);
+        foreach ([43, 44, 45] as $buyer) {
+            $other = (new OfflineSnapshotData($this->context))->build(User::find($buyer));
+            $this->assertFalse(in_array('mega_dealer', array_column($other['distributors'], 'supplier_type'), true));
+        }
+        $this->activateMegaDealer(['area' => 'South']);
+        $this->assertSame([200], array_column((new OfflineSnapshotData($this->context))->build(User::find(42))['distributors'], 'id'));
+    }
+
+    public function test_completed_wholesale_orders_reduce_mega_dealer_stock_before_offline_client_sales()
+    {
+        $this->activateMegaDealer();
+        $result = $this->send($this->megaDealerPayload(['items' => [['product_id' => 10, 'quantity' => 3, 'unit_price' => 50]]]));
+        $this->db->table('order_details')->where('id', $result['records'][0]['id'])->update(['status' => 'Completed']);
+        $this->assertEquals(5, $this->context->dealerStock(\App\Product::find(10), 43));
+        try { $this->send($this->payload(['type' => 'client', 'client_id' => 100, 'user_id' => 43,
+            'idempotency_key' => '00000000-0000-4000-8000-000000000002', 'items' => [['product_id' => 10, 'quantity' => 6, 'unit_price' => 70]]]), 43); $this->fail('Expected stock validation'); }
+        catch (ValidationException $error) { $this->assertArrayHasKey('items', $error->errors()); }
+        $this->assertSame(0, $this->db->table('transaction_details')->count());
     }
 
     public function test_zero_stock_ad_order_is_accepted_as_pending_without_stock_or_payment_fabrication()
@@ -453,11 +568,13 @@ class OfflineOrderSyncTest extends TestCase
 class IsolatedOfflineOrderController extends OfflineOrderController
 {
     public $notifications = 0;
+    public $notificationRecipients = [];
     public $failNotification = false;
 
     protected function notifyDistributor($order, $ad, $product, $user)
     {
         $this->notifications++;
+        $this->notificationRecipients[] = ['id' => (int) $ad->id, 'user_id' => (int) $ad->user_id];
         if ($this->failNotification) throw new RuntimeException('Synthetic mail failure');
     }
 }

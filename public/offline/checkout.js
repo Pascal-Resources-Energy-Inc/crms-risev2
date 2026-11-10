@@ -13,7 +13,10 @@
         return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20);
     }
     function read(storage, key, fallback) { const raw = storage.getItem(key); return raw === null ? fallback : JSON.parse(raw); }
-    function sameContext(a, b) { return ['user_id', 'type', 'ad_id', 'client_id', 'retry_key'].every(key => String(a[key] || '') === String(b[key] || '')); }
+    const supplierSource = value => value.supplier_source == null || value.supplier_source === '' ? 'admin_crms' : value.supplier_source;
+    function sameContext(a, b) { return ['user_id', 'type', 'ad_id', 'mega_dealer_id', 'client_id', 'retry_key'].every(key => String(a[key] || '') === String(b[key] || '')) &&
+        (a.supplier_type || 'area_distributor') === (b.supplier_type || 'area_distributor') &&
+        ((a.supplier_type || 'area_distributor') !== 'mega_dealer' || supplierSource(a) === supplierSource(b)); }
     function mount(win) {
         const doc = win.document, api = win.OfflineData, byId = id => doc.getElementById(id), cartPage = !!byId('cartItems');
         const notice = message => { byId('checkoutNotice').textContent = message; };
@@ -69,8 +72,11 @@
             const total = cart.reduce((sum, item) => sum + Number(item.price ?? item.unit_price) * Number(item.quantity), 0);
             byId('cartTotal').textContent = money(total);
             const recipients = context.type === 'order' ? snapshot.distributors : snapshot.customers;
-            const recipient = recipients.find(row => String(row.id) === String(context.type === 'order' ? context.ad_id : context.client_id));
-            byId('recipientLabel').textContent = context.type === 'order' ? 'Area Distributor' : 'Customer';
+            const mega = context.type === 'order' && context.supplier_type === 'mega_dealer';
+            const recipient = recipients.find(row => String(row.supplier_id || row.id) === String(context.type === 'order' ? mega ? context.mega_dealer_id : context.ad_id : context.client_id) &&
+                (context.type !== 'order' || (row.supplier_type || 'area_distributor') === (context.supplier_type || 'area_distributor')) &&
+                (!mega || ['admin_crms', 'dms_prei'].includes(supplierSource(context)) && supplierSource(row) === supplierSource(context)));
+            byId('recipientLabel').textContent = context.type === 'order' ? mega ? 'Mega Dealer' : 'Area Distributor' : 'Customer';
             byId('recipientName').textContent = recipient ? recipient.display_name || recipient.name : 'Choose a recipient in Products';
             byId('recipientDetails').textContent = recipient ? recipient.address || recipient.sales_territory || '' : '';
         }
@@ -113,7 +119,7 @@
                 api.validateOrder(snapshot, context, cart);
                 action.disabled = false;
                 if (showUpdated) notice('Latest data loaded. Your saved prices and selections are kept. Review the order before continuing.');
-                else notice(context.type === 'order' ? 'AD orders can be saved even when the AD is out of stock. Supply and fulfilment remain subject to confirmation.' : 'This sale uses available saved stock. Prices and stock are checked again when you sync.');
+                else notice(context.type === 'order' ? 'Supplier orders can be saved even when the supplier is out of stock. Supply and fulfilment remain subject to confirmation.' : 'This sale uses available saved stock. Prices and stock are checked again when you sync.');
             } catch (error) { notice(error.message + ' Open Products to review your cart.'); }
         }
         async function refresh(showUpdated) {

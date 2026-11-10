@@ -10,6 +10,7 @@ use App\Product;
 use App\Client;
 use App\Dealer;
 use App\Support\OrderReference;
+use App\Support\OfflinePortalContext;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -100,6 +101,10 @@ class TransactionController extends Controller
             ? $matchedADs
             : ($matchedADs->isNotEmpty() ? $matchedADs : $areaDistributor);
 
+        if ($user->isDealerLike()) {
+            $matchedADs = $availableADs = (new OfflinePortalContext)->suppliers($user);
+        }
+
         return view('place_order', [
             'transactions' => $transactions,
             'items' => $items,
@@ -151,9 +156,6 @@ class TransactionController extends Controller
                     ]);
                 }
             }
-            $dealerStock = $this->getDealerProductStock($item, auth()->id());
-            $transactionStatus = $dealerStock >= (int) $request->qty ? 'Completed' : 'Pending';
-
             $transaction = new TransactionDetail;
             $transaction->transaction_id = 'TRX-' . time() . '-' . rand(1000, 9999);
             if (Schema::hasColumn('transaction_details', 'product_id')) {
@@ -178,10 +180,15 @@ class TransactionController extends Controller
             $transaction->dealer_id = auth()->user()->id;
             $transaction->created_by = auth()->user()->id;
             $transaction->payment_method = $request->payment_method;
-            if (Schema::hasColumn('transaction_details', 'status')) {
-                $transaction->status = $transactionStatus;
-            }
-            $transaction->save();
+            $hasStatus = Schema::hasColumn('transaction_details', 'status');
+            $transactionStatus = DB::transaction(function () use ($transaction, $item, $user, $request, $hasStatus) {
+                // Wholesale fulfilment and client sales share the same stock lock.
+                DB::table('users')->where('id', $user->id)->lockForUpdate()->first();
+                $status = $this->getDealerProductStock($item, $user->id) >= (int) $request->qty ? 'Completed' : 'Pending';
+                if ($hasStatus) $transaction->status = $status;
+                $transaction->save();
+                return $status;
+            }, 3);
 
             if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
@@ -234,34 +241,43 @@ class TransactionController extends Controller
                 // 'item_id' => 'required|exists:items,id',
                 'item_id' => 'required|exists:dms.products,id',
                 'qty' => 'required|integer|min:1',
-                'area_distributor_id' => 'required|exists:dms.area_distributors,id',
+                'supplier_type' => 'nullable|in:area_distributor,mega_dealer',
+                'area_distributor_id' => 'nullable|integer',
+                'mega_dealer_id' => 'nullable|integer',
+                'supplier_source' => 'nullable|in:admin_crms,dms_prei',
                 'payment_method' => 'nullable|string|in:cash,gcash,credit,bank_transfer',
                 'delivery_type' => 'nullable|string|in:pickup,delivery',
                 'delivery_fee' => 'nullable|numeric|min:0',
             ]);
 
-            // $item = Item::findOrFail($request->item_id);
             $item = Product::findOrFail($request->item_id);
-            // $ad = AreaDistributor::findOrFail($request->area_distributor_id);
-            $ad = AreaDistributor::with('user')->findOrFail($request->area_distributor_id);
-
             $dealer = auth()->user();
-
-            if ($dealer->isDealerLike()) {
-                $territory = $this->salesAreaFor($dealer);
-                $isAssignedDistributor = $territory === ''
-                    ? !$dealer->usesSrpPricing()
-                    : $ad->areas()
-                        ->whereRaw('LOWER(TRIM(area_name)) = ?', [strtolower($territory)])
-                        ->whereRaw('LOWER(TRIM(user_role)) = ?', ['area distributor'])
-                        ->whereNull('deleted_at')
-                        ->exists();
-
-                if (!$isAssignedDistributor) {
-                    throw \Illuminate\Validation\ValidationException::withMessages([
-                        'area_distributor_id' => ['Select the Area Distributor assigned to your sales territory.'],
-                    ]);
-                }
+            $context = new OfflinePortalContext;
+            $supplierType = $request->input('supplier_type') ?: 'area_distributor';
+            if (($supplierType === 'mega_dealer' && $request->filled('area_distributor_id')) ||
+                ($supplierType === 'area_distributor' && $request->filled('mega_dealer_id'))) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['supplier' => ['Select one supplier for this order.']]);
+            }
+            $supplierId = $supplierType === 'mega_dealer' ? $request->input('mega_dealer_id') : $request->input('area_distributor_id');
+            $supplierSource = $request->input('supplier_source') ?: 'admin_crms';
+            $ad = $context->resolveOrderSupplier($dealer, $supplierType, $supplierId, $supplierSource);
+            if (strtolower(trim((string) $dealer->role)) === 'admin' && $supplierType === 'area_distributor') {
+                $ad = AreaDistributor::with('user')->whereNull('deleted_at')->find($supplierId);
+            }
+            if (!$ad || ($dealer->isDealerLike() && !$context->supplierProducts($dealer, $ad)->contains('id', $item->id))) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'supplier' => ['Select an eligible supplier and a product assigned to your sales area.'],
+                ]);
+            }
+            if ($supplierType === 'mega_dealer' && !Schema::hasColumn('order_details', 'mega_dealer_id')) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'supplier' => ['Mega Dealer ordering is being prepared. Please try again after the update finishes.'],
+                ]);
+            }
+            if ($supplierType === 'mega_dealer' && $supplierSource === 'dms_prei' && !Schema::hasColumn('order_details', 'mega_dealer_source')) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'supplier' => ['DMS Mega Dealer ordering is being prepared. Please try again after the update finishes.'],
+                ]);
             }
 
             $transaction = new OrderDetail;
@@ -281,8 +297,13 @@ class TransactionController extends Controller
                     ? ($item->mega_dealer_price ?? $item->dealer_price ?? $item->price ?? 0)
                     : ($item->dealer_price ?? $item->price ?? 0));
 
-            $transaction->ad_id = $request->area_distributor_id;
-            // $transaction->ad_id = $ad->user_id; // ✅ SAVE USER ID (NOT AD ID)
+            $transaction->ad_id = $supplierType === 'area_distributor' ? $ad->id : null;
+            if (Schema::hasColumn('order_details', 'mega_dealer_id')) {
+                $transaction->mega_dealer_id = $supplierType === 'mega_dealer' ? $ad->id : null;
+            }
+            if (Schema::hasColumn('order_details', 'mega_dealer_source')) {
+                $transaction->mega_dealer_source = $supplierType === 'mega_dealer' ? $ad->supplier_source : null;
+            }
             $transaction->ad_address = $ad->address ?? '';
             $transaction->date = date('Y-m-d');
             $transaction->dealer_id = $dealer->id;
@@ -295,18 +316,24 @@ class TransactionController extends Controller
             $transaction->status = 'Pending';
             OrderReference::save($transaction);
 
-            // ✅ SEND EMAIL TO AD
+            // The selected supplier receives the request after its reference is saved.
+            $notificationWarning = null;
             if ($ad->user && $ad->user->email) {
-                Mail::to($ad->user->email)->send(
-                    new NewADOrderMail($transaction, $ad, $item, $dealer)
-                );
+                try {
+                    Mail::to($ad->user->email)->send(new NewADOrderMail($transaction, $ad, $item, $dealer));
+                } catch (\Throwable $error) {
+                    $notificationWarning = 'Your order is saved, but the supplier email notification could not be sent.';
+                    \Illuminate\Support\Facades\Log::warning('Supplier order saved; email notification failed.', ['order_id' => $transaction->id]);
+                }
             }
 
             if ($request->expectsJson() || $request->ajax()) {
                 return response()->json([
                     'success' => true,
                     'message' => 'Transaction saved successfully',
-                    'transaction_id' => $transaction->id
+                    'id' => $transaction->id,
+                    'transaction_id' => $transaction->transaction_id,
+                    'warning' => $notificationWarning
                 ], 200);
             }
 
@@ -636,54 +663,6 @@ class TransactionController extends Controller
 
     private function getDealerProductStock(Product $product, $dealerId)
     {
-        // Product descriptions are not unique, so stock is matched by the
-        // actual product name, SKU, or product ID only.
-        $productNames = collect([$product->product_name])
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-        $productSkus = collect([$product->sku])->filter()->values()->all();
-
-        $completedOrderQty = 0;
-        if (Schema::hasTable('order_details')) {
-            $completedOrderQty = OrderDetail::query()
-                ->where('dealer_id', $dealerId)
-                ->where('status', 'Completed')
-                ->where(function ($query) use ($product, $productNames, $productSkus) {
-                    $query->whereIn('item', $productNames);
-
-                    if (Schema::hasColumn('order_details', 'product_id')) {
-                        $query->orWhere('product_id', $product->id);
-                    }
-
-                    if (Schema::hasColumn('order_details', 'sku') && !empty($productSkus)) {
-                        $query->orWhereIn('sku', $productSkus);
-                    }
-                })
-                ->sum('qty');
-        }
-
-        $soldQty = 0;
-        if (Schema::hasTable('transaction_details')) {
-            $soldQty = TransactionDetail::where('dealer_id', $dealerId)
-                ->where(function ($query) use ($product, $productNames, $productSkus) {
-                    $query->whereIn('item', $productNames);
-
-                    if (Schema::hasColumn('transaction_details', 'product_id')) {
-                        $query->orWhere('product_id', $product->id);
-                    }
-
-                    if (Schema::hasColumn('transaction_details', 'sku') && !empty($productSkus)) {
-                        $query->orWhereIn('sku', $productSkus);
-                    }
-                })
-                ->when(Schema::hasColumn('transaction_details', 'status'), function ($query) {
-                    $query->where('status', 'Completed');
-                })
-                ->sum('qty');
-        }
-
-        return max(0, (int) $completedOrderQty - (int) $soldQty);
+        return (new OfflinePortalContext)->dealerStock($product, $dealerId);
     }
 }
