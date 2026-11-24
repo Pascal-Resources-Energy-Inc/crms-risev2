@@ -569,6 +569,13 @@
                 orderData.customer = customerData;
             }
         }
+
+        const chiefCustomerIds = @json(auth()->user()->usesSrpPricing() ? $customers->pluck('id')->all() : null);
+        if (orderData.transaction_type !== 'ad_order' && customerData && chiefCustomerIds !== null &&
+            !chiefCustomerIds.some(id => String(id) === String(customerData.id))) {
+            customerData = null;
+            orderData.customer = null;
+        }
         
         // Preserve supplier identity across the cart and confirmation pages.
         if (orderData.ad && orderData.ad.id) {
