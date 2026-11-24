@@ -54,14 +54,12 @@ class TransactionController extends Controller
     public function index(Request $request)
     {
         $user = auth()->user();
+        $context = new OfflinePortalContext;
 
         $customersQuery = Client::whereHas('serial');
 
-        if ($user->isDealerLike()) {
-            $profile = $user->usesSrpPricing()
-                ? $user->centerChief
-                : ($user->usesMegaDealerPricing() ? $user->megaDealer : $user->dealer);
-            $mfi = trim((string) optional($profile)->mfi);
+        if ($user->isDealerLike() && !$user->usesSrpPricing()) {
+            $mfi = trim((string) optional($context->profile($user))->mfi);
             $customersQuery->when($mfi !== '', function ($query) use ($mfi) {
                 $query->whereRaw('LOWER(TRIM(mfi)) = ?', [strtolower($mfi)]);
             }, function ($query) {
@@ -69,7 +67,7 @@ class TransactionController extends Controller
             });
         }
 
-        $customers = $customersQuery->get();
+        $customers = $user->usesSrpPricing() ? $context->customers($user) : $customersQuery->get();
         $items = Item::get();
         $dealers = Dealer::get();
         $transactions = [];
@@ -102,7 +100,7 @@ class TransactionController extends Controller
             : ($matchedADs->isNotEmpty() ? $matchedADs : $areaDistributor);
 
         if ($user->isDealerLike()) {
-            $matchedADs = $availableADs = (new OfflinePortalContext)->suppliers($user);
+            $matchedADs = $availableADs = $context->suppliers($user);
         }
 
         return view('place_order', [
@@ -130,9 +128,14 @@ class TransactionController extends Controller
                 'delivery_type' => 'nullable|string|in:pickup,delivery',
             ]);
 
-            // $item = Item::findOrFail($request->item_id);
-            $item = Product::findOrFail($request->item_id);
             $isGuestTransaction = $request->customer_id === 'guest';
+            if ($isGuestTransaction && $user->usesSrpPricing()) {
+                throw \Illuminate\Validation\ValidationException::withMessages([
+                    'customer_id' => ['Select a customer assigned to your MFI.'],
+                ]);
+            }
+
+            $item = Product::findOrFail($request->item_id);
 
             if (! $isGuestTransaction) {
                 $request->validate([

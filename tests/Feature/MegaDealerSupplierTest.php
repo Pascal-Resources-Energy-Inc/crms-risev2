@@ -170,6 +170,20 @@ class MegaDealerSupplierTest extends TestCase
         $this->assertInstanceOf(\App\AreaDistributor::class, $this->mailer->sent[0]['mail']->ad);
     }
 
+    public function test_center_chief_cannot_submit_a_guest_client_transaction()
+    {
+        Container::getInstance()->instance(\Illuminate\Contracts\Auth\Factory::class, new MegaSupplierTestAuth(User::find(44)));
+        $request = MegaSupplierControllerRequest::create('/transactions/store', 'POST', [
+            'item_id' => 10, 'qty' => 1, 'customer_id' => 'guest',
+        ], [], [], ['HTTP_ACCEPT' => 'application/json']);
+
+        $response = (new TransactionController)->store($request);
+
+        $this->assertSame(422, $response->getStatusCode(), $response->getContent());
+        $this->assertArrayHasKey('customer_id', $response->getData(true)['errors']);
+        $this->assertSame(0, $this->db->table('transaction_details')->count());
+    }
+
     public function test_online_client_sales_cannot_resell_stock_already_supplied_to_a_dealer()
     {
         $this->supplierStock();

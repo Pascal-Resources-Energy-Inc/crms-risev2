@@ -153,15 +153,17 @@
                 <div id="customerDropdownContainer"></div>
                 <select id="customerSelector" class="customer-selector" style="display: none;">
                     <option value="">Select a customer</option>
-                    <option value="guest"
-                        data-name="Guest"
-                        data-full-name="Guest"
-                        data-serial=""
-                        data-number=""
-                        data-masked-serial=""
-                        data-masked-number="">
-                        Guest
-                    </option>
+                    @unless(auth()->user()->usesSrpPricing())
+                        <option value="guest"
+                            data-name="Guest"
+                            data-full-name="Guest"
+                            data-serial=""
+                            data-number=""
+                            data-masked-serial=""
+                            data-masked-number="">
+                            Guest
+                        </option>
+                    @endunless
                     @if(isset($customers))
                         @foreach($customers as $customer)
                             @php
@@ -1305,8 +1307,23 @@
     `;
     document.head.appendChild(toastStyle);
 
-    function loadSelectedCustomerFromProducts() {
+    function getCartCustomerId() {
         const customerId = localStorage.getItem('selectedCustomerId');
+        if (!usesSrpPricing || !customerId) return customerId;
+
+        const customerSelector = document.getElementById('customerSelector');
+        if (customerSelector && Array.from(customerSelector.options).some(option => option.value === customerId)) {
+            return customerId;
+        }
+
+        ['Id', 'Name', 'FullName', 'Serial', 'Number'].forEach(field => {
+            localStorage.removeItem(`selectedCustomer${field}`);
+        });
+        return null;
+    }
+
+    function loadSelectedCustomerFromProducts() {
+        const customerId = getCartCustomerId();
         const customerName = localStorage.getItem('selectedCustomerName');
         const customerSerial = localStorage.getItem('selectedCustomerSerial');
         const customerNumber = localStorage.getItem('selectedCustomerNumber');
@@ -1769,21 +1786,6 @@
 
     document.addEventListener('DOMContentLoaded', function() {
         loadSelectedCustomerFromProducts();
-        
-        const savedCustomerName = localStorage.getItem('selectedCustomerName');
-        const savedCustomerSerial = localStorage.getItem('selectedCustomerSerial');
-        const savedCustomerNumber = localStorage.getItem('selectedCustomerNumber');
-        
-        const customerNameElement = document.getElementById('assigned-customer-name');
-        const customerDetailsElement = document.getElementById('assigned-customer-details');
-        
-        if (savedCustomerName && customerNameElement) {
-            customerNameElement.textContent = savedCustomerName;
-            
-            if (customerDetailsElement && savedCustomerSerial && savedCustomerNumber) {
-                customerDetailsElement.textContent = `${savedCustomerSerial} • ${savedCustomerNumber}`;
-            }
-        }
 
         let dealerCartData = [];
         
@@ -2434,12 +2436,13 @@
                 let customerData = null;
 
                 if (transactionType === 'client_transaction') {
-                    const customerId = localStorage.getItem('selectedCustomerId');
+                    const customerId = getCartCustomerId();
                     const customerName = localStorage.getItem('selectedCustomerName');
                     const customerSerial = localStorage.getItem('selectedCustomerSerial');
                     const customerNumber = localStorage.getItem('selectedCustomerNumber');
 
                     if (!customerId || !customerName) {
+                        loadSelectedCustomerFromProducts();
                         alert('Please select a customer before placing the order.');
                         return;
                     }

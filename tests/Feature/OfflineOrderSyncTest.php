@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\OfflineOrderController;
+use App\Http\Controllers\TransactionController;
 use App\Support\OfflinePortalContext;
 use App\Support\OfflineSnapshotData;
 use App\Support\OrderReference;
@@ -408,6 +409,31 @@ class OfflineOrderSyncTest extends TestCase
     {
         $this->expectException(ValidationException::class);
         $this->send($this->payload(['type' => 'client', 'client_id' => 101, 'items' => [['product_id' => 10, 'quantity' => 1, 'unit_price' => 70]]]));
+    }
+
+    public function test_center_chief_checkout_uses_their_mfi_and_includes_customers_without_serials()
+    {
+        $this->db->connection()->getSchemaBuilder()->create('items', function ($table) {
+            $table->increments('id');
+        });
+        $this->db->table('dealers')->insert(['user_id' => 44, 'name' => 'Legacy profile', 'mfi' => 'Other MFI']);
+
+        $app = Container::getInstance();
+        $app->instance(\Illuminate\Contracts\Auth\Factory::class, new class {
+            public function user() { return User::find(44); }
+        });
+        $app->instance(\Illuminate\Contracts\View\Factory::class, new class {
+            public function make($view, $data, $mergeData) { return $data; }
+        });
+
+        $controller = new TransactionController;
+        $request = Request::create('/place_order');
+        $customers = $controller->index($request)['customers'];
+        $this->assertSame([100], $customers->pluck('id')->all());
+        $this->assertNull($customers->first()->serial_number);
+
+        $this->db->table('center_chiefs')->where('user_id', 44)->update(['mfi' => ' ']);
+        $this->assertTrue($controller->index($request)['customers']->isEmpty());
     }
 
     public function test_email_failure_does_not_undo_or_duplicate_a_saved_order()
